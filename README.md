@@ -74,3 +74,13 @@ podium_predictor.ipynb
 ## Notes
 
 Datasets are generated programmatically via API calls and are not stored directly in the repository.
+
+## Example Prediction Output
+
+Example model evaluation metrics from baseline classifier:
+
+- ROC AUC: 0.93
+- High recall for podium class
+- Moderate precision due to class imbalance
+
+Confusion matrix and classification reports are generated within the notebook.
