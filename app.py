@@ -1,9 +1,9 @@
 from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
 import pandas as pd
-import numpy as np
 import joblib
 from pathlib import Path
+from feature_builder import build_2025_lineup_map, build_feature_row
 
 # -------------------------
 # Load data / model on startup
@@ -17,10 +17,12 @@ MODEL_PATH = MODELS_DIR / "final_gb_model.joblib"
 THRESHOLD = 0.30
 
 df_feat = pd.read_csv(DF_PATH)
+lineup_map = build_2025_lineup_map(df_feat)
 model = joblib.load(MODEL_PATH)
 
 print("Loaded dataset from:", DF_PATH)
 print("Loaded model from:", MODEL_PATH)
+print("Running app file:", __file__)
 
 app = Flask(__name__)
 CORS(app)
@@ -145,33 +147,33 @@ INDEX_HTML = """
         <div class="card">
             <h1>F1 Podium Predictor</h1>
             <p class="subtitle">
-                Prototype interface for your Formula 1 podium prediction system.
-                Enter a season, round, and driver ID to request a prediction from the Flask backend.
+                Prototype interface for the Formula 1 podium prediction system.
+                Enter a circuit, driver, qualifying position, and grid position to request a prediction from the Flask backend.
             </p>
 
             <form id="predict-form">
                 <div class="grid">
                     <div>
-                        <label for="season">Season</label>
-                        <select id="season" name="season" required></select>
+                        <label for="circuitId">Circuit</label>
+                        <select id="circuitId" name="circuitId" required></select>
                     </div>
-
                     <div>
-                        <label for="round">Round</label>
-                        <select id="round" name="round" required></select>
-                    </div>
-
-                    <div>
-                        <label for="driverId">Driver ID</label>
+                        <label for="driverId">Driver</label>
                         <select id="driverId" name="driverId" required></select>
                     </div>
+                    <div>
+                        <label for="qual_position">Qualifying Position</label>
+                        <input type="number" id="qual_position" name="qual_position" min="1" max="20" required />
+                    </div>
+                    <div>
+                        <label for="grid">Grid Position</label>
+                        <input type="number" id="grid" name="grid" min="1" max="20" required />
+                    </div>
                 </div>
-
                 <button type="submit">Predict Podium Probability</button>
             </form>
-
             <p class="muted">
-                This prototype reads available options directly from the feature-engineered dataset.
+                Enter a circuit, driver, qualifying position, and grid position to simulate a podium prediction using the 2025 lineup.
             </p>
         </div>
 
@@ -183,24 +185,9 @@ INDEX_HTML = """
     </div>
 
     <script>
-        const state = {
-            rows: [],
-        };
-
-        const seasonSelect = document.getElementById("season");
-        const roundSelect = document.getElementById("round");
-        const driverSelect = document.getElementById("driverId");
         const form = document.getElementById("predict-form");
         const statusBox = document.getElementById("status");
         const resultBox = document.getElementById("result");
-
-        function uniqueSorted(values, numeric = false) {
-            const arr = [...new Set(values)];
-            if (numeric) {
-                return arr.sort((a, b) => Number(a) - Number(b));
-            }
-            return arr.sort();
-        }
 
         function setOptions(selectEl, values) {
             selectEl.innerHTML = "";
@@ -212,50 +199,32 @@ INDEX_HTML = """
             });
         }
 
-        function filterRows() {
-            const season = seasonSelect.value;
-            const round = roundSelect.value;
-            return state.rows.filter(row =>
-                String(row.season) === String(season) &&
-                String(row.round) === String(round)
-            );
-        }
-
-        function updateRounds() {
-            const season = seasonSelect.value;
-            const rounds = uniqueSorted(
-                state.rows
-                    .filter(row => String(row.season) === String(season))
-                    .map(row => row.round),
-                true
-            );
-            setOptions(roundSelect, rounds);
-            updateDrivers();
-        }
-
-        function updateDrivers() {
-            const rows = filterRows();
-            const drivers = uniqueSorted(rows.map(row => row.driverId));
-            setOptions(driverSelect, drivers);
-        }
-
         function renderPrediction(data) {
             const probabilityPct = (data.probability * 100).toFixed(1);
-
-            const reasonsHtml = (data.reasons || [])
-                .map(reason => `<li>${reason}</li>`)
-                .join("");
+            const rawProbabilityPct = typeof data.raw_probability === "number"
+                ? (data.raw_probability * 100).toFixed(1)
+                : null;
+            const adjustedProbabilityPct = typeof data.adjusted_probability === "number"
+                ? (data.adjusted_probability * 100).toFixed(1)
+                : null;
+            const adjustmentPts = typeof data.context_adjustment === "number"
+                ? (data.context_adjustment * 100).toFixed(1)
+                : null;
 
             const signals = data.signals || {};
             const facts = data.facts || {};
+            const fmt = (value) => (typeof value === "number" ? value.toFixed(2) : "N/A");
 
             resultBox.innerHTML = `
                 <div class="result-box">
-                    <h3>${data.decision}</h3>
-                    <p><strong>Probability:</strong> ${probabilityPct}%</p>
+                    <h3>${data.decision} (${probabilityPct}%)</h3>
+                    ${rawProbabilityPct !== null ? `<p><strong>Raw Model Probability:</strong> ${rawProbabilityPct}%</p>` : ""}
+                    ${adjustedProbabilityPct !== null ? `<p><strong>Context-Adjusted Probability:</strong> ${adjustedProbabilityPct}%</p>` : ""}
+                    ${adjustmentPts !== null ? `<p><strong>Context Adjustment:</strong> ${adjustmentPts}% points</p>` : ""}
                     <p><strong>Confidence:</strong> ${data.confidence_level}</p>
                     <p><strong>Threshold:</strong> ${data.decision_threshold}</p>
                     <p><strong>Summary:</strong> ${data.summary}</p>
+                    <p><strong>Model Insight:</strong> ${data.explanation_short}</p>
 
                     <div>
                         <span class="pill">Driver Form: ${signals.driver_form ?? "N/A"}</span>
@@ -264,34 +233,52 @@ INDEX_HTML = """
                         <span class="pill">Consistency: ${signals.consistency ?? "N/A"}</span>
                     </div>
 
-                    <h3>Reasons</h3>
-                    <ul>${reasonsHtml}</ul>
+                    <h3>Explanation</h3>
+                    <p>${data.explanation || "No explanation available."}</p>
 
-                    <h3>Key Facts</h3>
+                    ${data.contradiction_note ? `<p><strong>Model Note:</strong> ${data.contradiction_note}</p>` : ""}
+
+                    <h3>Key Supporting Factors</h3>
+                    <ul>${(data.main_support || []).map(item => `<li>${item}</li>`).join("")}</ul>
+
+                    <h3>Primary Risk Factors</h3>
+                    <ul>${(data.main_risks || []).map(item => `<li>${item}</li>`).join("")}</ul>
+                    
+                    <h3>Positive Factors</h3>
+                    <ul>${(data.positive_factors || []).map(item => `<li>${item}</li>`).join("")}</ul>
+                    
+                    <h3>Risk Factors</h3>
+                    <ul>${(data.risk_factors || []).map(item => `<li>${item}</li>`).join("")}</ul>
+
+                    <h3>Model Evidence</h3>
+                    <ul>
+                        <li>Grid Position: ${facts.grid ?? "N/A"}</li>
+                        <li>Qualifying Position: ${facts.qual_position ?? "N/A"}</li>
+                        <li>Driver Points (Last 3): ${fmt(facts.driver_points_last3)}</li>
+                        <li>Constructor Points (Last 3): ${fmt(facts.constructor_points_last3)}</li>
+                        <li>Driver Podiums (Last 3): ${fmt(facts.driver_podiums_last3)}</li>
+                        <li>Driver Avg Finish (Last 3): ${fmt(facts.driver_finishpos_last3)}</li>
+                    </ul>
+
+                    <h3>Debug Data</h3>
                     <pre>${JSON.stringify(facts, null, 2)}</pre>
                 </div>
             `;
         }
 
         async function loadMetadata() {
-            statusBox.textContent = "Loading available seasons, rounds, and drivers...";
+            statusBox.textContent = "Loading available circuits and drivers...";
             try {
                 const response = await fetch("/metadata");
                 const data = await response.json();
 
-                state.rows = data.rows || [];
-
-                if (!state.rows.length) {
-                    statusBox.innerHTML = '<span class="error">No dataset rows available.</span>';
+                if (!data.drivers || !data.circuits) {
+                    statusBox.innerHTML = '<span class="error">No metadata available.</span>';
                     return;
                 }
 
-                const seasons = uniqueSorted(state.rows.map(row => row.season), true);
-                setOptions(seasonSelect, seasons);
-                updateRounds();
-
-                seasonSelect.addEventListener("change", updateRounds);
-                roundSelect.addEventListener("change", updateDrivers);
+                setOptions(document.getElementById("circuitId"), data.circuits);
+                setOptions(document.getElementById("driverId"), data.drivers);
 
                 statusBox.textContent = "Ready. Select race inputs and run a prediction.";
             } catch (error) {
@@ -302,17 +289,19 @@ INDEX_HTML = """
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
 
-            const season = seasonSelect.value;
-            const round = roundSelect.value;
-            const driverId = driverSelect.value;
+            const circuitId = document.getElementById("circuitId").value;
+            const driverId = document.getElementById("driverId").value;
+            const qual_position = document.getElementById("qual_position").value;
+            const grid = document.getElementById("grid").value;
 
             statusBox.textContent = "Generating prediction...";
             resultBox.innerHTML = "";
 
             const params = new URLSearchParams({
-                season,
-                round,
-                driverId
+                circuitId,
+                driverId,
+                qual_position,
+                grid
             });
 
             try {
@@ -342,9 +331,9 @@ INDEX_HTML = """
 def driver_form_signal(row):
     if row["round"] <= 3:
         return "UNKNOWN"
-    if row["driver_points_last3"] >= 18:
+    if row["driver_points_last3"] >= 12:
         return "STRONG"
-    elif row["driver_points_last3"] >= 8:
+    elif row["driver_points_last3"] >= 5:
         return "MODERATE"
     else:
         return "WEAK"
@@ -352,9 +341,9 @@ def driver_form_signal(row):
 def constructor_momentum_signal(row):
     if row["round"] <= 3:
         return "UNKNOWN"
-    if row["constructor_podiums_last3"] >= 0.5:
+    if row["constructor_points_last3"] >= 10:
         return "HIGH"
-    elif row["constructor_podiums_last3"] >= 0.2:
+    elif row["constructor_points_last3"] >= 3:
         return "MEDIUM"
     else:
         return "LOW"
@@ -370,15 +359,29 @@ def grid_advantage_signal(row):
 def consistency_signal(row):
     if row["round"] <= 3:
         return "UNKNOWN"
-    if row["driver_finishpos_last3"] <= 4:
+    if row["driver_finishpos_last3"] <= 6:
         return "HIGH"
-    elif row["driver_finishpos_last3"] <= 9:
+    elif row["driver_finishpos_last3"] <= 10:
         return "MEDIUM"
     else:
         return "LOW"
 
-def generate_prediction_output(row_dict, podium_proba, threshold=THRESHOLD):
-    # row_dict is a plain dict (JSON-friendly)
+def apply_context_adjustment(proba, grid, qual_position):
+    grid_penalty = max(0, grid - 3) * 0.012
+    qual_penalty = max(0, qual_position - 3) * 0.010
+
+    front_bonus = 0.0
+    if grid <= 3:
+        front_bonus += (4 - grid) * 0.02
+    if qual_position <= 3:
+        front_bonus += (4 - qual_position) * 0.015
+
+    adjusted = proba - grid_penalty - qual_penalty + front_bonus
+    adjusted = max(0.0, min(1.0, adjusted))
+    adjustment = adjusted - proba
+    return float(adjusted), float(adjustment)
+
+def generate_prediction_output(row_dict, podium_proba, threshold=THRESHOLD, raw_proba=None, context_adjustment=None):
     signals = {
         "driver_form": driver_form_signal(row_dict),
         "constructor_momentum": constructor_momentum_signal(row_dict),
@@ -386,14 +389,29 @@ def generate_prediction_output(row_dict, podium_proba, threshold=THRESHOLD):
         "consistency": consistency_signal(row_dict),
     }
 
-    decision = "PODIUM_LIKELY" if podium_proba >= threshold else "PODIUM_UNLIKELY"
-
-    if podium_proba >= 0.75 or podium_proba <= 0.15:
-        confidence = "HIGH"
-    elif podium_proba >= 0.55 or podium_proba <= 0.30:
-        confidence = "MEDIUM"
+    if podium_proba >= 0.70:
+        decision = "High Podium Potential"
+    elif podium_proba >= 0.50:
+        decision = "Moderate Podium Potential"
+    elif podium_proba >= 0.30:
+        decision = "Low Podium Potential"
     else:
-        confidence = "LOW"
+        decision = "Unlikely Podium Outcome"
+
+    # base confidence from probability
+    if podium_proba >= 0.75 or podium_proba <= 0.15:
+        confidence = "High"
+    elif podium_proba >= 0.55 or podium_proba <= 0.30:
+        confidence = "Moderate"
+    else:
+        confidence = "Low"
+
+    # adjust confidence based on disagreement
+    if raw_proba is not None and context_adjustment is not None:
+        if abs(context_adjustment) > 0.25:
+            confidence = "Low (Model and contextual factors are in conflict)"
+        elif abs(context_adjustment) > 0.15:
+            confidence = "Moderate (Some conflict between model and context)"
 
     facts = {
         "grid": int(row_dict["grid"]),
@@ -403,20 +421,120 @@ def generate_prediction_output(row_dict, podium_proba, threshold=THRESHOLD):
         "driver_podiums_last3": float(row_dict["driver_podiums_last3"]),
         "driver_finishpos_last3": float(row_dict["driver_finishpos_last3"]),
         "constructor_podiums_last3": float(row_dict["constructor_podiums_last3"]),
+        "driver_track_avg_finish": float(row_dict["driver_track_avg_finish"]),
+        "driver_track_podium_rate": float(row_dict["driver_track_podium_rate"]),
+        "constructor_track_avg_finish": float(row_dict["constructor_track_avg_finish"]),
+        "constructor_track_podium_rate": float(row_dict["constructor_track_podium_rate"]),
         "grid_inverse": float(row_dict["grid_inverse"]),
     }
 
-    reasons = []
-    if signals["grid_positioning"] == "FRONT":
-        reasons.append("strong starting position advantage")
-    if signals["driver_form"] == "STRONG":
-        reasons.append("strong recent driver performance")
-    if signals["constructor_momentum"] == "HIGH":
-        reasons.append("strong recent constructor momentum")
-    if signals["consistency"] == "HIGH":
-        reasons.append("high recent finishing consistency")
-    if not reasons:
-        reasons.append("no strong performance signals detected")
+    positive_factors = []
+    risk_factors = []
+
+    if row_dict["grid"] <= 3:
+        positive_factors.append("front-row or near-front grid position")
+    elif row_dict["grid"] >= 11:
+        risk_factors.append("starting from the lower half of the grid")
+
+    if row_dict["qual_position"] <= 3:
+        positive_factors.append("strong qualifying performance")
+    elif row_dict["qual_position"] >= 11:
+        risk_factors.append("weaker qualifying position")
+
+    if row_dict["driver_points_last3"] >= 12:
+        positive_factors.append("strong recent driver points form")
+    elif row_dict["driver_points_last3"] < 5:
+        risk_factors.append("limited recent driver scoring form")
+
+    if row_dict["driver_podiums_last3"] >= 1:
+        positive_factors.append("recent podium finishes in previous races")
+
+    if row_dict["constructor_points_last3"] >= 10:
+        positive_factors.append("strong recent constructor momentum")
+    elif row_dict["constructor_points_last3"] < 3:
+        risk_factors.append("limited recent constructor momentum")
+
+    if row_dict["driver_finishpos_last3"] <= 6:
+        positive_factors.append("good recent finishing consistency")
+    elif row_dict["driver_finishpos_last3"] > 10:
+        risk_factors.append("inconsistent recent finishing performance")
+
+    if row_dict["driver_track_podium_rate"] >= 0.30:
+        positive_factors.append("encouraging historical podium rate at this circuit")
+    elif row_dict["driver_track_avg_finish"] > 10:
+        risk_factors.append("limited historical success at this circuit")
+
+    if row_dict["constructor_track_podium_rate"] >= 0.30:
+        positive_factors.append("constructor has competitive circuit history")
+
+    if not positive_factors:
+        positive_factors.append("no major positive indicators were detected")
+
+    if not risk_factors:
+        risk_factors.append("no major risk indicators were detected")
+
+    main_support = []
+    main_risks = []
+
+    if row_dict["driver_points_last3"] >= 12:
+        main_support.append("strong recent driver points form")
+    if row_dict["constructor_points_last3"] >= 10:
+        main_support.append("strong recent constructor momentum")
+    if row_dict["driver_finishpos_last3"] <= 6:
+        main_support.append("good recent finishing consistency")
+
+    if row_dict["grid"] >= 11:
+        main_risks.append("poor starting grid position")
+    if row_dict["qual_position"] >= 11:
+        main_risks.append("weak qualifying result")
+    if row_dict["driver_track_avg_finish"] > 10:
+        main_risks.append("limited historical circuit performance")
+
+    if not main_support:
+        main_support.append("no dominant supporting signal identified")
+    if not main_risks:
+        main_risks.append("no dominant risk signal identified")
+
+    contradiction_note = None
+    if podium_proba >= threshold and row_dict["grid"] >= 11:
+        contradiction_note = (
+            "There is a clear contradiction between strong historical performance signals "
+            "and an unfavourable starting position. This suggests that past performance is "
+            "offsetting a significant race-day disadvantage."
+        )
+    elif podium_proba < threshold and row_dict["grid"] <= 3:
+        contradiction_note = (
+            "Despite a strong starting position, the model remains cautious due to weaker "
+            "underlying performance indicators. This highlights the importance of consistency "
+            "and historical performance over isolated race conditions."
+        )
+
+    if raw_proba is not None and context_adjustment is not None:
+        explanation_short = (
+            f"The predicted podium probability is {podium_proba:.2f}, adjusted from an initial "
+            f"model estimate of {raw_proba:.2f}. Contextual factors such as grid and qualifying "
+            f"position contributed a {context_adjustment:+.2f} adjustment."
+        )
+    else:
+        explanation_short = (
+            f"The model estimates a podium probability of {podium_proba:.2f} "
+            f"based on grid position, qualifying result, recent form, and historical performance signals."
+        )
+
+    if podium_proba >= threshold:
+        explanation = (
+            f"The model predicts a competitive likelihood of achieving a podium finish. "
+            f"Key supporting factors include {', '.join(positive_factors[:3])}. "
+            f"However, some limiting factors such as {', '.join(risk_factors[:2])} remain present. "
+            f"Overall, the balance of performance indicators supports a positive outcome."
+        )
+    else:
+        explanation = (
+            f"The model predicts a reduced likelihood of a podium finish under the current race conditions. "
+            f"The primary limiting factors include {', '.join(risk_factors[:3])}. "
+            f"Although some positive indicators exist, such as {', '.join(positive_factors[:2])}, "
+            f"they are insufficient to outweigh the identified risks."
+        )
 
     summary = (
         f"Podium probability {podium_proba:.2f}. "
@@ -433,31 +551,16 @@ def generate_prediction_output(row_dict, podium_proba, threshold=THRESHOLD):
         "confidence_level": confidence,
         "signals": signals,
         "facts": facts,
-        "reasons": reasons,
+        "main_support": main_support,
+        "main_risks": main_risks,
+        "positive_factors": positive_factors,
+        "risk_factors": risk_factors,
+        "contradiction_note": contradiction_note,
         "summary": summary,
+        "explanation_short": explanation_short,
+        "explanation": explanation,
     }
-
-# -------------------------
-# Helper: find a row
-# -------------------------
-def find_row(season, rnd, driver_id):
-    subset = df_feat[
-        (df_feat["season"] == season) &
-        (df_feat["round"] == rnd) &
-        (df_feat["driverId"] == driver_id)
-    ]
-    if subset.empty:
-        return None
-    return subset.iloc[0]
-
-def get_metadata_rows():
-    meta = (
-        df_feat[["season", "round", "driverId"]]
-        .drop_duplicates()
-        .sort_values(["season", "round", "driverId"])
-    )
-    return meta.to_dict(orient="records")
-
+    
 # -------------------------
 # Routes
 # -------------------------
@@ -471,31 +574,67 @@ def health():
 
 @app.get("/metadata")
 def metadata():
-    return jsonify({"rows": get_metadata_rows()})
+    drivers = sorted(df_feat[df_feat["season"] == 2025]["driverId"].dropna().unique().tolist())
+    circuits = sorted(df_feat["circuitId"].dropna().unique().tolist())
+    return jsonify({
+        "drivers": drivers,
+        "circuits": circuits
+    })
 
 @app.get("/predict")
 def predict():
     try:
-        season = int(request.args.get("season"))
-        rnd = int(request.args.get("round"))
+        circuit_id = request.args.get("circuitId")
         driver_id = request.args.get("driverId")
-        if not driver_id:
-            return jsonify({"error": "Missing driverId"}), 400
+        qual_position = float(request.args.get("qual_position"))
+        grid = int(request.args.get("grid"))
+
+        if not circuit_id or not driver_id:
+            return jsonify({"error": "Missing circuitId or driverId"}), 400
+        if qual_position <= 0 or qual_position > 20:
+            return jsonify({"error": "Qualifying position must be between 1 and 20"}), 400
+        if grid <= 0 or grid > 20:
+            return jsonify({"error": "Grid must be between 1 and 20"}), 400
     except Exception:
-        return jsonify({"error": "Invalid or missing season/round/driverId"}), 400
+        return jsonify({"error": "Invalid inputs"}), 400
 
-    row = find_row(season, rnd, driver_id)
-    if row is None:
-        return jsonify({"error": "No matching row found"}), 404
+    try:
+        row_dict = build_feature_row(
+            df_feat=df_feat,
+            lineup_map=lineup_map,
+            circuit_id=circuit_id,
+            driver_id=driver_id,
+            qual_position=qual_position,
+            grid=grid
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
-    # Build model input row as a 1-row DataFrame
-    X = pd.DataFrame([row.drop("podium").to_dict()])
+    X = pd.DataFrame([row_dict])
 
-    proba = float(model.predict_proba(X)[:, 1][0])
+    if hasattr(model, "feature_names_in_"):
+        X = X.reindex(columns=model.feature_names_in_)
 
-    row_dict = row.to_dict()
-    out = generate_prediction_output(row_dict, proba, threshold=THRESHOLD)
-    out["request"] = {"season": season, "round": rnd, "driverId": driver_id}
+    raw_proba = float(model.predict_proba(X)[:, 1][0])
+    proba, context_adjustment = apply_context_adjustment(raw_proba, grid, qual_position)
+
+    out = generate_prediction_output(
+        row_dict,
+        proba,
+        threshold=THRESHOLD,
+        raw_proba=raw_proba,
+        context_adjustment=context_adjustment,
+    )
+    out["request"] = {
+        "circuitId": circuit_id,
+        "driverId": driver_id,
+        "qual_position": qual_position,
+        "grid": grid
+    }
+    out["raw_probability"] = float(raw_proba)
+    out["adjusted_probability"] = float(proba)
+    out["context_adjustment"] = float(context_adjustment)
+    out["resolved_constructor"] = row_dict["constructorId"]
 
     return jsonify(out)
 
