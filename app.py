@@ -3,7 +3,7 @@ from flask_cors import CORS
 import pandas as pd
 import joblib
 from pathlib import Path
-from feature_builder import build_2025_lineup_map, build_feature_row
+from feature_builder import build_2025_lineup_map, build_feature_row, AVG_FINISH_FALLBACK
 
 # -------------------------
 # Load data / model on startup
@@ -20,6 +20,9 @@ df_feat = pd.read_csv(DF_PATH)
 lineup_map = build_2025_lineup_map(df_feat)
 model = joblib.load(MODEL_PATH)
 
+RAW_PATH = DATA_DIR / "jolpica_podium_dataset_2022_2025.csv"
+df_raw = pd.read_csv(RAW_PATH)
+
 print("Loaded dataset from:", DF_PATH)
 print("Loaded model from:", MODEL_PATH)
 print("Running app file:", __file__)
@@ -30,1176 +33,893 @@ CORS(app)
 # -------------------------
 # Simple frontend
 # -------------------------
-INDEX_HTML = """
+INDEX_HTML = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>F1 Podium Predictor</title>
-    <style>
-        :root {
-            --bg: #0a0a0f;
-            --bg-soft: #11131a;
-            --card: rgba(255, 255, 255, 0.06);
-            --card-strong: rgba(255, 255, 255, 0.09);
-            --border: rgba(255, 255, 255, 0.10);
-            --text: #f5f7fb;
-            --muted: #b7bdc9;
-            --accent: #e10600;
-            --accent-2: #ff5a5f;
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-            --radius-xl: 24px;
-            --radius-lg: 18px;
-            --radius-md: 14px;
-            --maxw: 1240px;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        body {
-            margin: 0;
-            font-family: Inter, Arial, sans-serif;
-            background:
-                radial-gradient(circle at top left, rgba(225, 6, 0, 0.22), transparent 28%),
-                radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent 18%),
-                linear-gradient(180deg, #090a0f 0%, #0d1017 55%, #090a0f 100%);
-            color: var(--text);
-        }
-
-        body::before {
-            content: "";
-            position: fixed;
-            inset: 0;
-            background-image:
-                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-            background-size: 40px 40px;
-            pointer-events: none;
-        }
-
-        a {
-            color: inherit;
-            text-decoration: none;
-        }
-
-        .page-shell {
-            max-width: var(--maxw);
-            margin: 0 auto;
-            padding: 24px 20px 56px;
-        }
-
-        .topbar {
-            position: relative;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            padding: 14px 18px;
-            margin-bottom: 24px;
-            border: 1px solid var(--border);
-            background: rgba(255,255,255,0.04);
-            backdrop-filter: blur(10px);
-            border-radius: 18px;
-            box-shadow: var(--shadow);
-        }
-
-        .topbar::after {
-            content: "";
-            position: absolute;
-            left: 0;
-            bottom: -1px;
-            height: 3px;
-            width: 120px;
-            background: linear-gradient(90deg, #e10600, transparent);
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-weight: 800;
-            letter-spacing: 0.4px;
-        }
-
-        .brand-mark {
-            width: 38px;
-            height: 38px;
-            border-radius: 12px;
-            background: linear-gradient(135deg, var(--accent), var(--accent-2));
-            display: grid;
-            place-items: center;
-            font-size: 18px;
-            font-weight: 900;
-            box-shadow: 0 10px 24px rgba(225, 6, 0, 0.35);
-        }
-
-        .brand-sub {
-            font-size: 12px;
-            color: var(--muted);
-            font-weight: 500;
-            letter-spacing: 0.2px;
-        }
-
-        .nav {
-            display: flex;
-            gap: 18px;
-            color: var(--muted);
-            font-size: 14px;
-        }
-
-        .nav a:hover {
-            color: var(--text);
-        }
-
-        .hero {
-            position: relative;
-            overflow: hidden;
-            border-radius: 30px;
-            padding: 50px 36px;
-            margin-bottom: 26px;
-
-            background:
-                linear-gradient(120deg, rgba(225, 6, 0, 0.35), rgba(10,10,15,0.9)),
-                #0a0a0f;
-
-            border: 1px solid rgba(255,255,255,0.10);
-            box-shadow: 0 30px 70px rgba(0,0,0,0.6);
-        }
-
-        .hero-bg-text {
-            position: absolute;
-            right: -40px;
-            top: 10px;
-            font-size: 180px;
-            font-weight: 900;
-            letter-spacing: -6px;
-            color: rgba(255,255,255,0.04);
-            pointer-events: none;
-        }
-
-        .hero::before {
-            content: "";
-            position: absolute;
-            right: -90px;
-            top: -90px;
-            width: 320px;
-            height: 320px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(255,255,255,0.12), transparent 65%);
-            pointer-events: none;
-        }
-
-        .hero-grid {
-            display: grid;
-            grid-template-columns: 1.5fr 1fr;
-            gap: 28px;
-            align-items: center;
-        }
-
-        .eyebrow {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.08);
-            color: #fff;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.4px;
-            margin-bottom: 16px;
-        }
-
-        .eyebrow-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #fff;
-        }
-
-        .hero h1 {
-            font-size: clamp(30px, 4.2vw, 54px);
-            line-height: 1.04;
-            margin: 0 0 14px;
-            letter-spacing: -1.2px;
-        }
-
-        .hero p {
-            margin: 0;
-            max-width: 700px;
-            color: var(--muted);
-            font-size: 16px;
-            line-height: 1.65;
-        }
-
-        .hero-stats {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .hero-stat {
-            padding: 18px;
-            border-radius: 20px;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid var(--border);
-        }
-
-        .hero-stat-label {
-            color: var(--muted);
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-bottom: 8px;
-        }
-
-        .hero-stat-value {
-            font-size: 24px;
-            font-weight: 800;
-            letter-spacing: -0.8px;
-        }
-
-        .main-grid {
-            display: grid;
-            grid-template-columns: 0.92fr 1.08fr;
-            gap: 22px;
-            margin-bottom: 22px;
-        }
-
-        .card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-xl);
-            box-shadow: var(--shadow);
-            backdrop-filter: blur(10px);
-        }
-
-        .card-inner {
-            padding: 24px;
-        }
-
-        .card-inner::before {
-            content: "";
-            display: block;
-            width: 40px;
-            height: 3px;
-            background: #e10600;
-            margin-bottom: 16px;
-        }
-
-        .section-title {
-            margin: 0 0 6px;
-            font-size: 24px;
-            font-weight: 900;
-            letter-spacing: -0.5px;
-        }
-
-        .section-subtitle {
-            margin: 0 0 22px;
-            color: var(--muted);
-            font-size: 14px;
-            line-height: 1.6;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 18px;
-        }
-
-        .field {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .field.full {
-            grid-column: span 2;
-        }
-
-        label {
-            font-size: 13px;
-            color: #e8ebf2;
-            font-weight: 700;
-            letter-spacing: 0.2px;
-        }
-
-        input, select {
-            width: 100%;
-            padding: 15px 15px;
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.12);
-            background: rgba(255,255,255,0.05);
-            font-weight: 600;
-            color: var(--text);
-            font-size: 15px;
-            outline: none;
-        }
-
-        input:focus, select:focus {
-            border-color: rgba(225, 6, 0, 0.7);
-            box-shadow: 0 0 0 4px rgba(225, 6, 0, 0.15);
-        }
-
-        select option {
-            color: #111;
-        }
-
-        .button-row {
-            display: flex;
-            gap: 12px;
-            margin-top: 22px;
-        }
-
-        button {
-            appearance: none;
-            border: none;
-            border-radius: 14px;
-            padding: 15px 18px;
-            font-size: 15px;
-            font-weight: 800;
-            cursor: pointer;
-            transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
-        }
-
-        button:hover {
-            transform: translateY(-1px);
-            opacity: 0.96;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #e10600, #ff3b3b);
-            color: white;
-            font-weight: 900;
-            letter-spacing: 0.5px;
-            box-shadow: 0 12px 30px rgba(225,6,0,0.4);
-            flex: 1;
-        }
-
-        .btn-secondary {
-            background: rgba(255,255,255,0.08);
-            color: var(--text);
-            border: 1px solid var(--border);
-        }
-
-        .helper-text {
-            margin-top: 14px;
-            color: var(--muted);
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        .status {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 14px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.07);
-            color: var(--muted);
-            font-size: 13px;
-            margin-bottom: 18px;
-            border: 1px solid rgba(255,255,255,0.08);
-        }
-
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--warning);
-            box-shadow: 0 0 18px rgba(245, 158, 11, 0.65);
-        }
-
-        .status.ready .status-dot {
-            background: var(--success);
-            box-shadow: 0 0 18px rgba(34, 197, 94, 0.65);
-        }
-
-        .status.error .status-dot {
-            background: var(--danger);
-            box-shadow: 0 0 18px rgba(239, 68, 68, 0.65);
-        }
-
-        .empty-state {
-            min-height: 360px;
-            display: grid;
-            place-items: center;
-            text-align: center;
-            border: 1px dashed rgba(255,255,255,0.12);
-            border-radius: 20px;
-            background: rgba(255,255,255,0.03);
-            color: var(--muted);
-            padding: 20px;
-        }
-
-        .empty-state h3 {
-            margin: 0 0 10px;
-            color: var(--text);
-            font-size: 22px;
-        }
-
-        .prediction-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .decision-card {
-            position: relative;
-            border-radius: 22px;
-            padding: 26px;
-            background:
-                linear-gradient(135deg, rgba(225,6,0,0.35), rgba(0,0,0,0.6)),
-                #111;
-            border: 1px solid rgba(255,255,255,0.12);
-            box-shadow:
-                0 25px 60px rgba(225,6,0,0.25),
-                inset 0 1px 0 rgba(255,255,255,0.06);
-        }
-
-        .decision-card::before {
-            content: "";
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 6px;
-            height: 100%;
-            background: #e10600;
-        }
-
-        .decision-label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1.1px;
-            color: #ffd9d9;
-            margin-bottom: 12px;
-            font-weight: 800;
-        }
-
-        .decision-value {
-            font-size: clamp(30px, 3.1vw, 44px);
-            line-height: 1.06;
-            margin: 0 0 14px;
-            letter-spacing: -1.1px;
-            font-weight: 900;
-        }
-
-        .decision-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .meta-chip {
-            display: inline-flex;
-            align-items: center;
-            padding: 10px 13px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.10);
-            font-size: 13px;
-            color: #f8fafc;
-            font-weight: 700;
-        }
-
-        .meta-chip.conf-high {
-            background: rgba(34, 197, 94, 0.16);
-            border-color: rgba(34, 197, 94, 0.30);
-        }
-
-        .meta-chip.conf-moderate {
-            background: rgba(59, 130, 246, 0.16);
-            border-color: rgba(59, 130, 246, 0.30);
-        }
-
-        .meta-chip.conf-low {
-            background: rgba(245, 158, 11, 0.18);
-            border-color: rgba(245, 158, 11, 0.30);
-        }
-
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .metric-card {
-            padding: 20px;
-            border-radius: 18px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.10);
-            min-height: 108px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .metric-label {
-            color: var(--muted);
-            font-size: 11px;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.9px;
-            line-height: 1.4;
-        }
-
-        .metric-value {
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: -0.7px;
-            line-height: 1.1;
-        }
-
-        .split-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-        }
-
-        .subcard {
-            padding: 20px;
-            border-radius: 18px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.10);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-        }
-
-        .subcard h3 {
-            margin: 0 0 14px;
-            font-size: 17px;
-            letter-spacing: -0.3px;
-        }
-
-        .subcard p {
-            margin: 0;
-            color: var(--muted);
-            line-height: 1.65;
-            font-size: 14px;
-        }
-
-        .pill-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .pill {
-            display: inline-flex;
-            align-items: center;
-            padding: 10px 12px;
-            border-radius: 999px;
-            font-size: 13px;
-            font-weight: 700;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.10);
-            color: #f3f6fb;
-        }
-
-        ul.clean-list {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-            display: grid;
-            gap: 10px;
-        }
-
-        ul.clean-list li {
-            padding: 12px 14px;
-            border-radius: 14px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.08);
-            color: #eef2f8;
-            line-height: 1.5;
-            font-size: 14px;
-        }
-
-        details {
-            border-radius: 18px;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid var(--border);
-            overflow: hidden;
-        }
-
-        summary {
-            cursor: pointer;
-            list-style: none;
-            padding: 18px 20px;
-            font-weight: 800;
-            font-size: 15px;
-        }
-
-        summary::-webkit-details-marker {
-            display: none;
-        }
-
-        .details-content {
-            padding: 0 20px 20px;
-        }
-
-        .tech-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-            margin-bottom: 14px;
-        }
-
-        .tech-item {
-            padding: 14px;
-            border-radius: 14px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.08);
-        }
-
-        .tech-item strong {
-            display: block;
-            font-size: 12px;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.7px;
-            margin-bottom: 8px;
-        }
-
-        .tech-item span {
-            font-weight: 800;
-            color: var(--text);
-            font-size: 16px;
-        }
-
-        pre {
-            margin: 0;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            background: #090b11;
-            color: #f8fafc;
-            padding: 16px;
-            border-radius: 16px;
-            border: 1px solid rgba(255,255,255,0.08);
-            overflow-x: auto;
-            font-size: 12px;
-            line-height: 1.55;
-        }
-
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 18px;
-        }
-
-        .info-card {
-            padding: 20px;
-            border-radius: 20px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow);
-        }
-
-        .info-card h3 {
-            margin: 0 0 10px;
-            font-size: 18px;
-            letter-spacing: -0.4px;
-        }
-
-        .info-card p {
-            margin: 0;
-            color: var(--muted);
-            font-size: 14px;
-            line-height: 1.7;
-        }
-
-        .footer-note {
-            margin-top: 22px;
-            color: var(--muted);
-            text-align: center;
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        .error-text {
-            color: #ffd6d6;
-        }
-
-        @media (max-width: 1100px) {
-            .hero-grid,
-            .main-grid,
-            .info-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .metrics-grid,
-            .split-grid,
-            .tech-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 760px) {
-            .page-shell {
-                padding: 16px 14px 40px;
-            }
-
-            .topbar {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .nav {
-                flex-wrap: wrap;
-            }
-
-            .hero {
-                padding: 28px 20px;
-            }
-
-            .card-inner {
-                padding: 18px;
-            }
-
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .field.full {
-                grid-column: span 1;
-            }
-
-            .hero-stats {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>F1 Podium Predictor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg:        #15151E;
+      --bg-raised: #1E1E2E;
+      --bg-card:   #22222F;
+      --bg-input:  #2A2A3A;
+      --border:    #2E2E3E;
+      --border-hi: #3E3E55;
+      --red:       #E8002D;
+      --red-dim:   rgba(232,0,45,0.12);
+      --red-dark:  #B0001F;
+      --g1:        #CCCCCC;
+      --white:     #FFFFFF;
+      --g2:        #888899;
+      --g3:        #44445A;
+      --ghost:     rgba(255,255,255,0.035);
+      --font:      'Titillium Web', sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--white); font-family: var(--font); min-height: 100vh; overflow-x: hidden; }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 200;
+      background: var(--bg); border-bottom: 1px solid var(--border);
+      height: 56px; display: flex; align-items: center; padding: 0 32px; gap: 32px;
+    }
+    .f1-badge {
+      background: var(--red); color: white;
+      padding: 5px 11px 5px 9px;
+      clip-path: polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
+      font-size: 14px; font-weight: 900; letter-spacing: 0.05em;
+    }
+    .nav-title {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.25em; text-transform: uppercase;
+      color: var(--g2); margin-left: 10px;
+    }
+    .nav-links { margin-left: auto; display: flex; }
+    .nav-links a {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--g2); text-decoration: none;
+      padding: 0 16px; height: 56px;
+      display: flex; align-items: center;
+      border-bottom: 3px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    .nav-links a:hover { color: var(--white); }
+    .nav-links a.active { color: var(--white); border-bottom-color: var(--red); }
+
+    /* HERO — matches image3 "RACE WEEKEND" dark card */
+    .hero {
+      position: relative;
+      background: var(--bg);
+      padding: 52px 40px 44px;
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; right: -80px; bottom: -120px;
+      width: 560px; height: 560px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(176,0,31,0.35) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero::after {
+      content: 'PREDICTOR';
+      position: absolute; right: -20px; bottom: -28px;
+      font-size: 130px; font-weight: 900;
+      color: var(--ghost); letter-spacing: -0.03em;
+      line-height: 1; pointer-events: none; user-select: none; white-space: nowrap;
+    }
+    .hero-eyebrow {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.3em; text-transform: uppercase;
+      color: var(--red); margin-bottom: 14px;
+    }
+    .hero-title {
+      font-size: clamp(36px,6vw,72px); font-weight: 900;
+      letter-spacing: -0.02em; line-height: 0.95;
+      text-transform: uppercase; margin-bottom: 14px;
+    }
+    .hero-subtitle {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--g2); margin-bottom: 36px;
+    }
+    .hero-stats { display: flex; gap: 0; }
+    .hero-stat {
+      padding-right: 28px; margin-right: 28px;
+      border-right: 1px solid var(--border-hi);
+    }
+    .hero-stat:last-child { border-right: none; }
+    .hero-stat-val { font-size: 26px; font-weight: 900; line-height: 1; }
+    .hero-stat-val em { color: var(--red); font-style: normal; }
+    .hero-stat-label {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--g2); margin-top: 5px;
+    }
+
+    /* LAYOUT */
+    .layout { display: grid; grid-template-columns: 360px 1fr; min-height: calc(100vh - 56px - 160px); }
+
+    /* SIDEBAR */
+    .sidebar {
+      background: var(--bg-raised);
+      border-right: 1px solid var(--border);
+      padding: 32px 28px;
+    }
+    .sec-tag {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.35em; text-transform: uppercase;
+      color: var(--g3); margin-bottom: 22px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .sec-tag::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    .field { margin-bottom: 18px; }
+    .field label {
+      display: block; font-size: 9px; font-weight: 700;
+      letter-spacing: 0.25em; text-transform: uppercase;
+      color: var(--g2); margin-bottom: 7px;
+    }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .f1-input {
+      width: 100%; background: var(--bg-input);
+      border: 1px solid var(--border-hi);
+      color: var(--white); font-family: var(--font);
+      font-size: 13px; font-weight: 600;
+      padding: 11px 14px; outline: none;
+      transition: border-color .15s, background .15s;
+      appearance: none; -webkit-appearance: none; border-radius: 0;
+    }
+    .f1-input:focus { border-color: var(--red); background: #1f1424; }
+    select.f1-input {
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888899'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+    select.f1-input option { background: #22222F; }
+
+    /* CTA — angled F1 button from image1 "MERCHANDISE" */
+    .cta-btn {
+      width: 100%; background: var(--red); color: white;
+      border: none; font-family: var(--font);
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.3em; text-transform: uppercase;
+      padding: 15px 24px; cursor: pointer; margin-top: 8px;
+      clip-path: polygon(10px 0%,100% 0%,calc(100% - 10px) 100%,0% 100%);
+      position: relative; overflow: hidden;
+      transition: background .15s;
+    }
+    .cta-btn::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent);
+      transform: translateX(-100%); transition: transform .5s;
+    }
+    .cta-btn:hover { background: #ff0033; }
+    .cta-btn:hover::after { transform: translateX(100%); }
+    .cta-btn:active { transform: scale(0.98); }
+    .cta-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* Mini stat cards — image1 bottom-left info card */
+    .mini-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); margin-top: 28px; }
+    .mini-card { background: var(--bg-card); padding: 14px 16px; }
+    .mini-card-val { font-size: 20px; font-weight: 900; color: var(--red); line-height: 1; }
+    .mini-card-label { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--g2); margin-top: 5px; }
+
+    /* MAIN */
+    .main { background: var(--bg); padding: 32px; }
+
+    /* Idle */
+    .idle-state {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 420px; color: var(--g3); text-align: center; gap: 16px;
+    }
+    .idle-icon {
+      width: 64px; height: 64px; border: 2px solid var(--border-hi);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 24px; color: var(--red);
+    }
+    .idle-state p { font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; line-height: 1.8; }
+
+    /* Loading */
+    .loading-state { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 420px; gap: 18px; }
+    .loading-state.show { display: flex; }
+    .race-loader { width: 180px; height: 3px; background: var(--border); position: relative; overflow: hidden; }
+    .race-loader-bar {
+      position: absolute; height: 100%; width: 70px;
+      background: linear-gradient(90deg,transparent,var(--red),var(--red),transparent);
+      animation: carRace .9s linear infinite;
+    }
+    @keyframes carRace { 0%{left:-70px} 100%{left:180px} }
+    .loading-label { font-size: 10px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: var(--g2); }
+
+    /* Error */
+    .error-state { display: none; background: var(--red-dim); border-left: 3px solid var(--red); padding: 18px 20px; margin-bottom: 24px; gap: 12px; align-items: flex-start; }
+    .error-state.show { display: flex; }
+    .error-icon { color: var(--red); font-size: 18px; flex-shrink: 0; }
+    .error-body { font-size: 13px; color: #ff6b6b; line-height: 1.5; }
+    .error-body strong { display: block; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 4px; }
+
+    /* Results */
+    .results { display: none; }
+    .results.show { display: block; }
+
+    /* Decision hero — image3 top "RACE WEEKEND" large heading card */
+    .decision-hero {
+      position: relative; background: var(--bg-raised);
+      border: 1px solid var(--border);
+      padding: 32px 32px 24px; margin-bottom: 1px; overflow: hidden;
+    }
+    .decision-hero::before {
+      content: ''; position: absolute;
+      left: 0; top: 0; bottom: 0; width: 4px; background: var(--red);
+    }
+    /* Ghost numeral like image2 large rank numbers */
+    .decision-hero::after {
+      content: attr(data-ghost);
+      position: absolute; right: 20px; bottom: -20px;
+      font-size: 160px; font-weight: 900;
+      color: var(--ghost); letter-spacing: -0.04em;
+      line-height: 1; pointer-events: none; user-select: none;
+    }
+    .dh-eye { font-size: 9px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: var(--red); margin-bottom: 10px; }
+    .dh-dec {
+      font-size: clamp(24px,4vw,40px); font-weight: 900;
+      text-transform: uppercase; letter-spacing: -0.01em;
+      line-height: 1; margin-bottom: 14px;
+    }
+    .driver-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+    .driver-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg-input); border: 1px solid var(--border-hi);
+      padding: 6px 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+    }
+    .dp-code { font-size: 13px; font-weight: 900; letter-spacing: 0.12em; }
+    .dp-sep { color: var(--g3); }
+    .dp-team { color: var(--g2); font-weight: 600; }
+
+    .dh-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .badge { font-size: 9px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; padding: 4px 10px; border: 1px solid; }
+    .b-red   { color: var(--red);   border-color: var(--red);   background: var(--red-dim); }
+    .b-green { color: #4ade80; border-color: #4ade80; background: rgba(74,222,128,0.08); }
+    .b-amber { color: #fbbf24; border-color: #fbbf24; background: rgba(251,191,36,0.08); }
+    .b-grey  { color: var(--g2);  border-color: var(--border-hi); }
+
+    /* Probability bar row */
+    .prob-row {
+      background: var(--bg-raised); border: 1px solid var(--border); border-top: none;
+      padding: 20px 32px; display: flex; align-items: center; gap: 28px; margin-bottom: 1px;
+    }
+    .prob-num { font-size: 48px; font-weight: 900; line-height: 1; width: 100px; flex-shrink: 0; }
+    .prob-num small { font-size: 22px; font-weight: 700; color: var(--g2); }
+    .prob-track-wrap { flex: 1; }
+    .prob-track-label { display: flex; justify-content: space-between; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--g2); margin-bottom: 8px; }
+    .prob-track { height: 4px; background: var(--border-hi); position: relative; }
+    .prob-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--red); transition: width 1.2s cubic-bezier(0.4,0,0.2,1); width: 0; }
+    .prob-thresh { position: absolute; left: 30%; top: -5px; bottom: -5px; width: 2px; background: rgba(251,191,36,0.7); }
+    .prob-thresh::before { content: '30%'; position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 8px; font-weight: 700; color: #fbbf24; white-space: nowrap; letter-spacing: 0.1em; }
+
+    /* Adj row — image3 session list columns */
+    .adj-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--border); margin-bottom: 1px; }
+    .adj-cell { background: var(--bg-raised); padding: 16px 24px; }
+    .adj-label { font-size: 9px; font-weight: 700; letter-spacing: 0.25em; text-transform: uppercase; color: var(--g2); margin-bottom: 6px; }
+    .adj-val { font-size: 22px; font-weight: 900; }
+    .adj-pos { color: #4ade80; }
+    .adj-neg { color: var(--red); }
+
+    /* Signals — image2 team row layout */
+    .signals-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: var(--border); margin-bottom: 20px; }
+    .signal-cell {
+      background: var(--bg-raised); padding: 18px 16px; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    /* ghost rank numeral inside signal — image2 large position numbers */
+    .signal-cell::after {
+      content: attr(data-rank);
+      position: absolute; right: 6px; bottom: -8px;
+      font-size: 56px; font-weight: 900; color: var(--ghost);
+      line-height: 1; pointer-events: none;
+    }
+    .sig-label { font-size: 9px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--g2); margin-bottom: 10px; }
+    .sig-icon  { font-size: 22px; margin-bottom: 6px; }
+    .sig-val   { font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; }
+    .c-green { color: #4ade80; } .c-amber { color: #fbbf24; } .c-red { color: var(--red); } .c-blue { color: #60a5fa; } .c-grey { color: var(--g2); }
+
+    /* Contradiction strip */
+    .contraband { display: none; background: var(--red-dim); border-left: 3px solid var(--red); padding: 12px 18px; margin-bottom: 20px; gap: 10px; align-items: flex-start; }
+    .contraband.show { display: flex; }
+    .contra-icon { color: var(--red); font-size: 14px; flex-shrink: 0; margin-top: 2px; }
+    .contra-text { font-size: 13px; color: #ff8888; line-height: 1.5; }
+
+    /* Two-col factors */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .panel { background: var(--bg-raised); border: 1px solid var(--border); }
+    .panel-head { padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 9px; font-weight: 700; letter-spacing: 0.28em; text-transform: uppercase; color: var(--g2); display: flex; align-items: center; gap: 8px; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .dot-g { background: #4ade80; } .dot-r { background: var(--red); } .dot-b { background: #60a5fa; }
+    .panel-body { padding: 14px 18px; }
+
+    /* Factor list — image3 schedule row style */
+    .factor-list { list-style: none; }
+    .factor-list li { display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 9px 0; font-size: 13px; color: var(--g1); border-bottom: 1px solid var(--border); align-items: baseline; line-height: 1.4; }
+    .factor-list li:last-child { border-bottom: none; }
+    .fi { font-size: 11px; font-weight: 700; }
+    .fi-g { color: #4ade80; } .fi-r { color: var(--red); }
+
+    /* Evidence table */
+    .ev-panel { background: var(--bg-raised); border: 1px solid var(--border); margin-bottom: 12px; }
+    .ev-table { width: 100%; border-collapse: collapse; }
+    .ev-table tr { border-bottom: 1px solid var(--border); }
+    .ev-table tr:last-child { border-bottom: none; }
+    .ev-table td { padding: 11px 18px; font-size: 13px; }
+    .ev-table td:first-child { font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--g2); width: 55%; }
+    .ev-table td:last-child { font-weight: 700; text-align: right; font-size: 14px; }
+    .ev-g { color: #4ade80; } .ev-w { color: #fbbf24; } .ev-r { color: var(--red); }
+
+    /* Explanation */
+    .xp-panel { background: var(--bg-raised); border: 1px solid var(--border); margin-bottom: 24px; }
+    .xp-body { padding: 18px; font-size: 14px; line-height: 1.75; color: var(--g1); font-weight: 300; }
+    .xp-body strong { color: var(--white); font-weight: 700; }
+
+    /* Responsive */
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+      .signals-grid { grid-template-columns: 1fr 1fr; }
+      .two-col { grid-template-columns: 1fr; }
+      nav { padding: 0 16px; }
+      .nav-links a { padding: 0 10px; }
+      .hero { padding: 36px 20px; }
+      .hero::after { display: none; }
+      .main, .sidebar { padding: 20px; }
+      .prob-row { flex-direction: column; gap: 14px; }
+      .prob-num { width: auto; font-size: 40px; }
+    }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+
+    /* Decision Thresholds Table */
+    .threshold-section {
+      margin-top: 30px;
+      padding: 32px 28px;
+      background: var(--bg-raised);
+      border-top: 1px solid var(--border);
+    }
+    .threshold-section .section-title {
+      font-size: clamp(24px, 3vw, 32px);
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .threshold-section .section-subtitle {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--g2);
+      margin-bottom: 22px;
+    }
+    .threshold-table {
+      margin-top: 16px;
+      border-radius: 0;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.04);
+    }
+    .threshold-row {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr 2fr;
+      padding: 16px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 14px;
+      color: var(--white);
+    }
+    .threshold-row:last-child {
+      border-bottom: none;
+    }
+    .threshold-row.header {
+      background: rgba(255,255,255,0.08);
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.6px;
+      color: #e10600;
+      border-left: 4px solid #e10600;
+    }
+    .threshold-row div {
+      display: flex;
+      align-items: center;
+    }
+    
+    /* Mini Bar Charts */
+    .form-charts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+    .chart-box {
+      padding: 16px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .chart-box h3 {
+      margin: 0 0 14px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: #e10600;
+    }
+    .chart-box canvas {
+      width: 100% !important;
+      height: 120px !important;
+    }
+  </style>
 </head>
 <body>
-    <div class="page-shell">
-        <header class="topbar">
-            <div class="brand">
-                <div class="brand-mark">F1</div>
-                <div>
-                    <div>F1 Podium Predictor</div>
-                    <div class="brand-sub">Machine learning prototype for podium probability prediction</div>
-                </div>
-            </div>
-            <nav class="nav">
-                <a href="#predictor">Predictor</a>
-                <a href="#insights">Insights</a>
-                <a href="#technical">Model Breakdown</a>
-            </nav>
-        </header>
 
-        <section class="hero">
-            <div class="hero-bg-text">PODIUM</div>
-            <div class="hero-grid">
-                <div>
-                    <div class="eyebrow">
-                        <span class="eyebrow-dot"></span>
-                        Formula 1 Race Outcome Analytics
-                    </div>
-                    <h1>Race to the Podium</h1>
-                    <p>
-                        Predict Formula 1 podium potential using historical race performance,
-                        constructor momentum, track-specific indicators, and race-context inputs
-                        such as qualifying and grid position.
-                    </p>
-                </div>
-                <div class="hero-stats">
-                    <div class="hero-stat">
-                        <div class="hero-stat-label">Model Type</div>
-                        <div class="hero-stat-value">Gradient Boosting</div>
-                    </div>
-                    <div class="hero-stat">
-                        <div class="hero-stat-label">Prediction Focus</div>
-                        <div class="hero-stat-value">Podium Probability</div>
-                    </div>
-                    <div class="hero-stat">
-                        <div class="hero-stat-label">Feature Basis</div>
-                        <div class="hero-stat-value">Track + Form + Grid</div>
-                    </div>
-                    <div class="hero-stat">
-                        <div class="hero-stat-label">System Output</div>
-                        <div class="hero-stat-value">Explainable Result</div>
-                    </div>
-                </div>
-            </div>
-        </section>
+<nav>
+  <span class="f1-badge">F1</span>
+  <span class="nav-title">Podium Predictor</span>
+  <div class="nav-links">
+    <a href="#" class="active">Predict</a>
+    <a href="#">2025 Season</a>
+    <a href="#">Model</a>
+  </div>
+</nav>
 
-        <section id="predictor" class="main-grid">
-            <div class="card">
-                <div class="card-inner">
-                    <h2 class="section-title">Race Setup</h2>
-                    <p class="section-subtitle">
-                        Select a circuit and driver, then enter qualifying and starting grid positions
-                        to generate a podium probability estimate for the race scenario.
-                    </p>
+<div class="hero">
+  <div class="hero-eyebrow">Machine Learning · 2025 Season</div>
+  <h1 class="hero-title">F1 Podium<br>Predictor</h1>
+  <p class="hero-subtitle">Formula 1 Grand Prix · Race Outcome Prediction</p>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="hero-stat-val"><em>0.947</em></div>
+      <div class="hero-stat-label">ROC AUC Score</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-val"><em>72.5</em>%</div>
+      <div class="hero-stat-label">F1 Score</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-val">1,838</div>
+      <div class="hero-stat-label">Training Rows</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-val">19</div>
+      <div class="hero-stat-label">Model Features</div>
+    </div>
+  </div>
+</div>
 
-                    <form id="predict-form">
-                        <div class="form-grid">
-                            <div class="field full">
-                                <label for="circuitId">Circuit</label>
-                                <select id="circuitId" name="circuitId" required></select>
-                            </div>
-
-                            <div class="field full">
-                                <label for="driverId">Driver</label>
-                                <select id="driverId" name="driverId" required></select>
-                            </div>
-
-                            <div class="field">
-                                <label for="qual_position">Qualifying Position</label>
-                                <input type="number" id="qual_position" name="qual_position" min="1" max="20" required />
-                            </div>
-
-                            <div class="field">
-                                <label for="grid">Grid Position</label>
-                                <input type="number" id="grid" name="grid" min="1" max="20" required />
-                            </div>
-                        </div>
-
-                        <div class="button-row">
-                            <button type="submit" class="btn-primary">Run Podium Analysis</button>
-                            <button type="button" class="btn-secondary" id="reset-btn">Reset</button>
-                        </div>
-                    </form>
-
-                    <p class="helper-text">
-                        This interface is designed for presentation and demonstration purposes.
-                        The output combines the model estimate with race-context adjustments and
-                        explainability signals.
-                    </p>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-inner">
-                    <div id="statusWrap" class="status">
-                        <span class="status-dot"></span>
-                        <span id="statusText">Loading available circuits and drivers...</span>
-                    </div>
-
-                    <div id="result" class="empty-state">
-                        <div>
-                            <h3>Prediction Ready</h3>
-                            <p>
-                                Once you submit a race scenario, the system will display the decision,
-                                probability breakdown, supporting signals, risk signals, and technical evidence.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="insights" class="info-grid">
-            <div class="info-card">
-                <h3>Model Overview</h3>
-                <p>
-                    The system uses a Gradient Boosting classifier trained on historical Formula 1 data
-                    from the 2022–2025 regulation period to estimate podium likelihood.
-                </p>
-            </div>
-
-            <div class="info-card">
-                <h3>Key Signals</h3>
-                <p>
-                    Predictions are influenced by recent driver form, constructor momentum, track history,
-                    qualifying position, starting grid position, and race consistency indicators.
-                </p>
-            </div>
-
-            <div class="info-card">
-                <h3>Explainability Layer</h3>
-                <p>
-                    The output includes supporting factors, risk factors, contradiction notes,
-                    and a natural language explanation to improve interpretability during evaluation.
-                </p>
-            </div>
-        </section>
-
-        <div class="footer-note">
-            F1 Podium Predictor — presentation-ready prototype for podium prediction and explainable race analytics.
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sec-tag">Race Inputs</div>
+    <form id="pform">
+      <div class="field">
+        <label>Circuit</label>
+        <select class="f1-input" id="circuitId" required>
+          <option value="" disabled selected>Loading circuits…</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Driver</label>
+        <select class="f1-input" id="driverId" required>
+          <option value="" disabled selected>Loading drivers…</option>
+        </select>
+      </div>
+      <div class="field">
+        <div class="field-row">
+          <div>
+            <label>Qualifying P</label>
+            <input class="f1-input" type="number" id="qual_position" min="1" max="20" placeholder="1–20" required />
+          </div>
+          <div>
+            <label>Grid P</label>
+            <input class="f1-input" type="number" id="grid" min="1" max="20" placeholder="1–20" required />
+          </div>
         </div>
+      </div>
+      <button type="submit" class="cta-btn" id="submit-btn">Run Prediction →</button>
+    </form>
+    <div class="mini-cards">
+      <div class="mini-card"><div class="mini-card-val" id="stat-drivers">—</div><div class="mini-card-label">2025 Drivers</div></div>
+      <div class="mini-card"><div class="mini-card-val" id="stat-circuits">—</div><div class="mini-card-label">Circuits</div></div>
+      <div class="mini-card"><div class="mini-card-val">30%</div><div class="mini-card-label">Threshold</div></div>
+      <div class="mini-card"><div class="mini-card-val">GB</div><div class="mini-card-label">Model</div></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="idle-state" id="s-idle">
+      <div class="idle-icon">◈</div>
+      <p>Configure race inputs<br>and run a prediction</p>
     </div>
 
-    <script>
-        const form = document.getElementById("predict-form");
-        const resultBox = document.getElementById("result");
-        const resetBtn = document.getElementById("reset-btn");
-        const statusWrap = document.getElementById("statusWrap");
-        const statusText = document.getElementById("statusText");
+    <div class="loading-state" id="s-loading">
+      <div class="race-loader"><div class="race-loader-bar"></div></div>
+      <div class="loading-label">Analysing telemetry…</div>
+    </div>
 
-        function setStatus(message, type = "default") {
-            statusWrap.className = "status";
-            if (type === "ready") statusWrap.classList.add("ready");
-            if (type === "error") statusWrap.classList.add("error");
-            statusText.textContent = message;
-        }
+    <div class="error-state" id="s-error">
+      <div class="error-icon">⚠</div>
+      <div class="error-body"><strong>Prediction Failed</strong><span id="err-msg"></span></div>
+    </div>
 
-        function setOptions(selectEl, values) {
-            selectEl.innerHTML = "";
-            values.forEach(value => {
-                const option = document.createElement("option");
-                option.value = value;
-                option.textContent = value;
-                selectEl.appendChild(option);
-            });
-        }
+    <div class="results" id="s-results">
 
-        function fmtNum(value, digits = 2) {
-            return typeof value === "number" ? value.toFixed(digits) : "N/A";
-        }
+      <div class="decision-hero" id="dh" data-ghost="">
+        <div class="dh-eye">Prediction Result</div>
+        <div class="dh-dec" id="r-decision">—</div>
+        <div class="driver-row">
+          <div class="driver-pill"><span class="dp-code" id="r-code">—</span><span class="dp-sep">·</span><span class="dp-team" id="r-team">—</span></div>
+          <div class="driver-pill"><span class="dp-team" id="r-circuit">—</span></div>
+        </div>
+        <div class="dh-badges">
+          <span class="badge" id="r-conf-badge">—</span>
+          <span class="badge b-grey">Threshold 30%</span>
+        </div>
+      </div>
 
-        function titleCase(value) {
-            if (!value) return "N/A";
-            return value.charAt(0).toUpperCase() + value.slice(1);
-        }
+      <div class="prob-row">
+        <div class="prob-num" id="r-pct">—<small>%</small></div>
+        <div class="prob-track-wrap">
+          <div class="prob-track-label"><span>Podium Probability</span><span id="r-pct2">0%</span></div>
+          <div class="prob-track">
+            <div class="prob-fill" id="r-bar"></div>
+            <div class="prob-thresh"></div>
+          </div>
+        </div>
+      </div>
 
-        function getConfidenceClass(confidence) {
-            if (!confidence) return "";
-            const c = confidence.toLowerCase();
-            if (c.includes("high")) return "conf-high";
-            if (c.includes("moderate")) return "conf-moderate";
-            if (c.includes("low")) return "conf-low";
-            return "";
-        }
+      <div class="adj-grid">
+        <div class="adj-cell"><div class="adj-label">Model Raw</div><div class="adj-val" id="r-raw">—</div></div>
+        <div class="adj-cell"><div class="adj-label">Context Δ</div><div class="adj-val" id="r-delta">—</div></div>
+        <div class="adj-cell"><div class="adj-label">Adjusted</div><div class="adj-val" id="r-adj">—</div></div>
+      </div>
 
-        function renderList(items) {
-            if (!items || !items.length) {
-                return "<ul class='clean-list'><li>No items available.</li></ul>";
-            }
-            return `<ul class="clean-list">${items.map(item => `<li>${item}</li>`).join("")}</ul>`;
-        }
+      <div class="signals-grid">
+        <div class="signal-cell" data-rank="1"><div class="sig-label">Driver Form</div><div class="sig-icon" id="r-si-form">—</div><div class="sig-val" id="r-sv-form">—</div></div>
+        <div class="signal-cell" data-rank="2"><div class="sig-label">Constructor</div><div class="sig-icon" id="r-si-cons">—</div><div class="sig-val" id="r-sv-cons">—</div></div>
+        <div class="signal-cell" data-rank="3"><div class="sig-label">Grid Position</div><div class="sig-icon" id="r-si-grid">—</div><div class="sig-val" id="r-sv-grid">—</div></div>
+        <div class="signal-cell" data-rank="4"><div class="sig-label">Consistency</div><div class="sig-icon" id="r-si-cns2">—</div><div class="sig-val" id="r-sv-cns2">—</div></div>
+      </div>
 
-        function renderPrediction(data) {
-            const probabilityPct = (data.probability * 100).toFixed(1);
-            const rawProbabilityPct = typeof data.raw_probability === "number"
-                ? (data.raw_probability * 100).toFixed(1)
-                : "N/A";
-            const adjustedProbabilityPct = typeof data.adjusted_probability === "number"
-                ? (data.adjusted_probability * 100).toFixed(1)
-                : "N/A";
-            const adjustmentPts = typeof data.context_adjustment === "number"
-                ? (data.context_adjustment * 100).toFixed(1)
-                : "N/A";
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-head"><div class="dot dot-b"></div>Driver Form Trend</div>
+          <div class="panel-body" style="height:200px;">
+            <canvas id="driverChart"></canvas>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="dot dot-b"></div>Constructor Form Trend</div>
+          <div class="panel-body" style="height:200px;">
+            <canvas id="constructorChart"></canvas>
+          </div>
+        </div>
+      </div>
 
-            const signals = data.signals || {};
-            const facts = data.facts || {};
+      <div class="contraband" id="r-contra">
+        <div class="contra-icon">!</div>
+        <div class="contra-text" id="r-contra-text"></div>
+      </div>
 
-            resultBox.className = "prediction-panel";
-            resultBox.innerHTML = `
-                <div class="decision-card">
-                    <div class="decision-label">Podium Projection</div>
-                    <h2 class="decision-value">${data.decision} (${probabilityPct}%)</h2>
-                    <div class="decision-meta">
-                        <span class="meta-chip ${getConfidenceClass(data.confidence_level)}">Confidence: ${data.confidence_level || "N/A"}</span>
-                        <span class="meta-chip">Constructor: ${titleCase(data.resolved_constructor)}</span>
-                    </div>
-                </div>
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-head"><div class="dot dot-g"></div>Positive Factors</div>
+          <div class="panel-body"><ul class="factor-list" id="r-pos"></ul></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="dot dot-r"></div>Risk Factors</div>
+          <div class="panel-body"><ul class="factor-list" id="r-risk"></ul></div>
+        </div>
+      </div>
 
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-label">Raw Model Probability</div>
-                        <div class="metric-value">${rawProbabilityPct}%</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Context-Adjusted Probability</div>
-                        <div class="metric-value">${adjustedProbabilityPct}%</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Adjustment Impact</div>
-                        <div class="metric-value">${adjustmentPts}%</div>
-                    </div>
-                </div>
+      <div class="ev-panel">
+        <div class="panel-head"><div class="dot dot-b"></div>Model Evidence</div>
+        <table class="ev-table"><tbody id="r-ev"></tbody></table>
+      </div>
 
-                <div class="subcard">
-                    <h3>Model Insight</h3>
-                    <p>${data.explanation_short || "No short explanation available."}</p>
-                </div>
+      <div class="xp-panel">
+        <div class="panel-head"><div class="dot dot-b"></div>Model Explanation</div>
+        <div class="xp-body" id="r-explain">—</div>
+      </div>
 
-                <div class="split-grid">
-                    <div class="subcard">
-                        <h3>Explanation</h3>
-                        <p>${data.explanation || "No explanation available."}</p>
-                    </div>
+    </div>
+  </main>
+</div>
 
-                    <div class="subcard">
-                        <h3>Performance Signals</h3>
-                        <div class="pill-row">
-                            <span class="pill">Driver Form: ${signals.driver_form ?? "N/A"}</span>
-                            <span class="pill">Constructor Momentum: ${signals.constructor_momentum ?? "N/A"}</span>
-                            <span class="pill">Grid Positioning: ${signals.grid_positioning ?? "N/A"}</span>
-                            <span class="pill">Consistency: ${signals.consistency ?? "N/A"}</span>
-                        </div>
-                    </div>
-                </div>
+<div class="threshold-section">
+  <h2 class="section-title">Decision Thresholds</h2>
+  <p class="section-subtitle">
+    The model categorizes podium potential based on probability ranges.
+  </p>
 
-                <div class="split-grid">
-                    <div class="subcard">
-                        <h3>Key Supporting Factors</h3>
-                        ${renderList(data.main_support)}
-                    </div>
+  <div class="threshold-table">
+    <div class="threshold-row header">
+      <div>Label</div>
+      <div>Probability Range</div>
+      <div>Interpretation</div>
+    </div>
 
-                    <div class="subcard">
-                        <h3>Primary Risk Factors</h3>
-                        ${renderList(data.main_risks)}
-                    </div>
-                </div>
+    <div class="threshold-row">
+      <div>Very Likely Chance of a Podium Finish</div>
+      <div>≥ 70%</div>
+      <div>Strong likelihood based on performance and context</div>
+    </div>
 
-                ${data.contradiction_note ? `
-                    <div class="subcard">
-                        <h3>Contradiction Insight</h3>
-                        <p>${data.contradiction_note}</p>
-                    </div>
-                ` : ""}
+    <div class="threshold-row">
+      <div>Likely Chance of a Podium Finish</div>
+      <div>50% – 69.9%</div>
+      <div>Balanced scenario — outcome could go either way</div>
+    </div>
 
-                <details id="technical">
-                    <summary>Model Breakdown</summary>
-                    <div class="details-content">
-                        <div class="tech-grid">
-                            <div class="tech-item">
-                                <strong>Decision Threshold</strong>
-                                <span>${data.decision_threshold ?? "N/A"}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Grid Position</strong>
-                                <span>${facts.grid ?? "N/A"}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Qualifying Position</strong>
-                                <span>${facts.qual_position ?? "N/A"}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Driver Points (Last 3)</strong>
-                                <span>${fmtNum(facts.driver_points_last3)}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Constructor Points (Last 3)</strong>
-                                <span>${fmtNum(facts.constructor_points_last3)}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Driver Podiums (Last 3)</strong>
-                                <span>${fmtNum(facts.driver_podiums_last3)}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Driver Avg Finish (Last 3)</strong>
-                                <span>${fmtNum(facts.driver_finishpos_last3)}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Driver Track Avg Finish</strong>
-                                <span>${fmtNum(facts.driver_track_avg_finish)}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Driver Track Podium Rate</strong>
-                                <span>${fmtNum(facts.driver_track_podium_rate)}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Constructor Track Avg Finish</strong>
-                                <span>${fmtNum(facts.constructor_track_avg_finish)}</span>
-                            </div>
-                            <div class="tech-item">
-                                <strong>Constructor Track Podium Rate</strong>
-                                <span>${fmtNum(facts.constructor_track_podium_rate)}</span>
-                            </div>
-                        </div>
+    <div class="threshold-row">
+      <div>Moderate Chance of a Podium Finish</div>
+      <div>30% – 49.9%</div>
+      <div>Possible but requires favourable conditions</div>
+    </div>
 
-                        <pre>${JSON.stringify(facts, null, 2)}</pre>
-                    </div>
-                </details>
-            `;
-        }
+    <div class="threshold-row">
+      <div>Unlikely Chance of a Podium Finish</div>
+      <div>&lt; 30%</div>
+      <div>Weak indicators for podium finish</div>
+    </div>
+  </div>
+</div>
 
-        function resetUI() {
-            form.reset();
-            resultBox.className = "empty-state";
-            resultBox.innerHTML = `
-                <div>
-                    <h3>Prediction Ready</h3>
-                    <p>
-                        Once you submit a race scenario, the system will display the decision,
-                        probability breakdown, supporting signals, risk signals, and technical evidence.
-                    </p>
-                </div>
-            `;
-            setStatus("Ready. Select race inputs and generate a prediction.", "ready");
-        }
+<script>
+const $ = id => document.getElementById(id);
+let driverChartInstance = null;
+let constructorChartInstance = null;
 
-        async function loadMetadata() {
-            setStatus("Loading available circuits and drivers...");
-            try {
-                const response = await fetch("/metadata");
-                const data = await response.json();
+const ICON = {
+  STRONG:'🔥', HIGH:'▲', FRONT:'🏁',
+  MODERATE:'⚡', MEDIUM:'◆', MIDFIELD:'→',
+  WEAK:'↓', LOW:'▽', BACK:'⬇',
+  UNKNOWN:'?', LIMITED:'↓'
+};
 
-                if (!data.drivers || !data.circuits) {
-                    setStatus("No metadata available.", "error");
-                    return;
-                }
+const COL = {
+  STRONG:'c-green', HIGH:'c-green', FRONT:'c-green',
+  MODERATE:'c-amber', MEDIUM:'c-amber', MIDFIELD:'c-blue',
+  WEAK:'c-red', LOW:'c-red', BACK:'c-red',
+  UNKNOWN:'c-grey', LIMITED:'c-red'
+};
 
-                setOptions(document.getElementById("circuitId"), data.circuits);
-                setOptions(document.getElementById("driverId"), data.drivers);
+const DRIVER_NAME_MAP = {
+  "max_verstappen": "Max Verstappen",
+  "max_ve": "Max Verstappen",
+  "lewis_hamilton": "Lewis Hamilton",
+  "hamilton": "Lewis Hamilton",
+  "charles_leclerc": "Charles Leclerc",
+  "leclerc": "Charles Leclerc",
+  "carlos_sainz": "Carlos Sainz",
+  "sainz": "Carlos Sainz",
+  "lando_norris": "Lando Norris",
+  "norris": "Lando Norris",
+  "george_russell": "George Russell",
+  "russell": "George Russell"
+};
 
-                setStatus("Ready. Select race inputs and generate a prediction.", "ready");
-            } catch (error) {
-                setStatus(`Failed to load metadata: ${error.message}`, "error");
-            }
-        }
+function ui(s) {
+  if (s === 'idle') destroyCharts();
+  $('s-idle').style.display = s==='idle' ? 'flex' : 'none';
+  $('s-loading').classList.toggle('show', s==='loading');
+  $('s-error').classList.toggle('show', s==='error');
+  $('s-results').classList.toggle('show', s==='results');
+}
 
-        form.addEventListener("submit", async (event) => {
-            event.preventDefault();
+function formatName(value) {
+  if (!value) return "N/A";
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
 
-            const circuitId = document.getElementById("circuitId").value;
-            const driverId = document.getElementById("driverId").value;
-            const qual_position = document.getElementById("qual_position").value;
-            const grid = document.getElementById("grid").value;
+function formatDriver(value) {
+  if (!value) return "N/A";
+  return DRIVER_NAME_MAP[value] || formatName(value);
+}
 
-            setStatus("Generating prediction...");
-            resultBox.className = "empty-state";
-            resultBox.innerHTML = `
-                <div>
-                    <h3>Running Prediction</h3>
-                    <p>The system is processing the selected race scenario.</p>
-                </div>
-            `;
+function destroyCharts() {
+  if (driverChartInstance) {
+    driverChartInstance.destroy();
+    driverChartInstance = null;
+  }
+  if (constructorChartInstance) {
+    constructorChartInstance.destroy();
+    constructorChartInstance = null;
+  }
+}
 
-            const params = new URLSearchParams({
-                circuitId,
-                driverId,
-                qual_position,
-                grid
-            });
+function renderFormCharts(d) {
+  destroyCharts();
 
-            try {
-                const response = await fetch(`/predict?${params.toString()}`);
-                const data = await response.json();
+  const driverCanvas = document.getElementById('driverChart');
+  const constructorCanvas = document.getElementById('constructorChart');
 
-                if (!response.ok) {
-                    throw new Error(data.error || "Prediction request failed.");
-                }
+  if (!driverCanvas || !constructorCanvas) return;
 
-                renderPrediction(data);
-                setStatus("Prediction completed successfully.", "ready");
-            } catch (error) {
-                resultBox.className = "empty-state";
-                resultBox.innerHTML = `
-                    <div>
-                        <h3 class="error-text">Prediction Failed</h3>
-                        <p class="error-text">${error.message}</p>
-                    </div>
-                `;
-                setStatus("Prediction failed. Please review the input values.", "error");
-            }
-        });
+  const driverTrend = d.driver_points_trend || [];
+  const constructorTrend = d.constructor_points_trend || [];
+  const labels = d.trend_labels || ['Race -3', 'Race -2', 'Race -1'];
 
-        resetBtn.addEventListener("click", resetUI);
+  driverChartInstance = new Chart(driverCanvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Driver Points',
+        data: driverTrend,
+        tension: 0.35,
+        borderColor: '#E8002D',
+        backgroundColor: 'rgba(232,0,45,0.15)',
+        fill: true,
+        pointRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#888899' }, grid: { color: '#2E2E3E' } },
+        y: { ticks: { color: '#888899' }, grid: { color: '#2E2E3E' }, beginAtZero: true }
+      }
+    }
+  });
 
-        loadMetadata();
-    </script>
+  constructorChartInstance = new Chart(constructorCanvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Constructor Points',
+        data: constructorTrend,
+        tension: 0.35,
+        borderColor: '#FFFFFF',
+        backgroundColor: 'rgba(255,255,255,0.10)',
+        fill: true,
+        pointRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#888899' }, grid: { color: '#2E2E3E' } },
+        y: { ticks: { color: '#888899' }, grid: { color: '#2E2E3E' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function setSig(iconId, valId, raw) {
+  const v = (raw||'UNKNOWN').toUpperCase();
+  $(iconId).textContent = ICON[v]||'?';
+  $(valId).textContent  = v;
+  $(valId).className    = 'sig-val '+(COL[v]||'c-grey');
+}
+
+function render(d) {
+  const pct = (d.probability * 100).toFixed(1);
+  const pctNum = parseFloat(pct);
+  $('dh').dataset.ghost = pct+'%';
+  $('r-decision').textContent = d.decision||'—';
+  $('r-code').textContent     = formatDriver(d.request?.driverId);
+  $('r-team').textContent     = formatName(d.resolved_constructor);
+  $('r-circuit').textContent  = formatName(d.request?.circuitId);
+
+  const cb = $('r-conf-badge');
+  cb.textContent = 'Confidence: '+(d.confidence_level||'—');
+  const cl = (d.confidence_level||'').toLowerCase();
+  cb.className = 'badge '+(cl.startsWith('high')?'b-green':cl.startsWith('moderate')?'b-amber':'b-red');
+
+  $('r-pct').innerHTML = pct+'<small>%</small>';
+  $('r-pct2').textContent = pct+'%';
+  setTimeout(()=>{ $('r-bar').style.width = pct+'%'; }, 80);
+
+  const rp = ((d.raw_probability ?? d.probability) * 100).toFixed(1);
+  const ap = ((d.adjusted_probability ?? d.probability) * 100).toFixed(1);
+  const dl = ((d.context_adjustment ?? 0) * 100).toFixed(1);
+  $('r-raw').textContent = rp+'%';
+  $('r-adj').textContent = ap+'%';
+  const de = $('r-delta');
+  de.textContent = ((parseFloat(dl) >= 0 ? '+' : '') + dl + '%');
+  de.className = 'adj-val ' + (parseFloat(dl) >= 0 ? 'adj-pos' : 'adj-neg');
+
+  const sg = d.signals||{};
+  setSig('r-si-form','r-sv-form',sg.driver_form);
+  setSig('r-si-cons','r-sv-cons',sg.constructor_momentum);
+  setSig('r-si-grid','r-sv-grid',sg.grid_positioning);
+  setSig('r-si-cns2','r-sv-cns2',sg.consistency);
+  
+  renderFormCharts(d);
+
+  if (d.contradiction_note) { $('r-contra').classList.add('show'); $('r-contra-text').textContent=d.contradiction_note; }
+  else { $('r-contra').classList.remove('show'); }
+
+  const pf=$('r-pos'); pf.innerHTML='';
+  (d.positive_factors||[]).forEach(f=>{ const li=document.createElement('li'); li.innerHTML=`<span class="fi fi-g">✓</span><span>${f[0].toUpperCase()+f.slice(1)}</span>`; pf.appendChild(li); });
+
+  const rf=$('r-risk'); rf.innerHTML='';
+  (d.risk_factors||[]).forEach(f=>{ const li=document.createElement('li'); li.innerHTML=`<span class="fi fi-r">✕</span><span>${f[0].toUpperCase()+f.slice(1)}</span>`; rf.appendChild(li); });
+
+  const fts=d.facts||{};
+  const rows=[
+    ['Grid Position',fts.grid,v=>v<=3?'ev-g':v>=11?'ev-r':''],
+    ['Qualifying Position',fts.qual_position,v=>v<=3?'ev-g':v>=11?'ev-r':''],
+    ['Driver Points (L3)',(fts.driver_points_last3||0).toFixed(1),v=>parseFloat(v)>=12?'ev-g':parseFloat(v)<5?'ev-r':'ev-w'],
+    ['Constructor Points (L3)',(fts.constructor_points_last3||0).toFixed(1),v=>parseFloat(v)>=10?'ev-g':parseFloat(v)<3?'ev-r':'ev-w'],
+    ['Driver Podiums (L3)',(fts.driver_podiums_last3||0).toFixed(2),v=>parseFloat(v)>=0.33?'ev-g':''],
+    ['Avg Finish Pos (L3)',(fts.driver_finishpos_last3||0).toFixed(1),v=>parseFloat(v)<=6?'ev-g':parseFloat(v)>10?'ev-r':'ev-w'],
+    ['Track Podium Rate',((fts.driver_track_podium_rate||0)*100).toFixed(0)+'%',v=>parseFloat(v)>=30?'ev-g':''],
+    ['Constr. Track Podium',((fts.constructor_track_podium_rate||0)*100).toFixed(0)+'%',v=>parseFloat(v)>=30?'ev-g':''],
+  ];
+  const tb=$('r-ev'); tb.innerHTML='';
+  rows.forEach(([label,val,cls])=>{
+    const tr=document.createElement('tr');
+    const c=cls?cls(val):'';
+    tr.innerHTML=`<td>${label}</td><td class="${c}">${val??'—'}</td>`;
+    tb.appendChild(tr);
+  });
+
+  $('r-explain').innerHTML = d.explanation||d.summary||'—';
+}
+
+$('pform').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const btn=$('submit-btn'); btn.disabled=true;
+  ui('loading');
+  const p=new URLSearchParams({circuitId:$('circuitId').value,driverId:$('driverId').value,qual_position:$('qual_position').value,grid:$('grid').value});
+  try {
+    const res=await fetch('/predict?'+p);
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||'Prediction failed');
+    render(data); ui('results');
+  } catch(err) { $('err-msg').textContent=err.message; ui('error'); }
+  finally { btn.disabled=false; }
+});
+
+async function loadMeta() {
+  try {
+    const res=await fetch('/metadata');
+    const data=await res.json();
+    if(data.circuits){
+      const sc=$('circuitId'); sc.innerHTML='';
+      data.circuits.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase()); sc.appendChild(o); });
+      $('stat-circuits').textContent=data.circuits.length;
+    }
+    if(data.drivers){
+      const sd=$('driverId'); sd.innerHTML='';
+      data.drivers.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase()); sd.appendChild(o); });
+    }
+  } catch(e){ console.warn('Metadata unavailable:',e.message); }
+}
+      $('stat-drivers').textContent=data.drivers.length;
+
+ui('idle');
+loadMeta();
+</script>
 </body>
 </html>
 """
@@ -1269,13 +989,13 @@ def generate_prediction_output(row_dict, podium_proba, threshold=THRESHOLD, raw_
     }
 
     if podium_proba >= 0.70:
-        decision = "High Podium Potential"
+        decision = "Very Likely Chance of a Podium Finish"
     elif podium_proba >= 0.50:
-        decision = "Moderate Podium Potential"
+        decision = "Likely Chance of a Podium Finish"
     elif podium_proba >= 0.30:
-        decision = "Low Podium Potential"
+        decision = "Moderate Chance of a Podium Finish"
     else:
-        decision = "Unlikely Podium Outcome"
+        decision = "Unlikely Chance of a Podium Finish"
 
     # base confidence from probability
     if podium_proba >= 0.75 or podium_proba <= 0.15:
@@ -1478,14 +1198,15 @@ def predict():
         return jsonify({"error": "Invalid inputs"}), 400
 
     try:
-        row_dict = build_feature_row(
-            df_feat=df_feat,
-            lineup_map=lineup_map,
-            circuit_id=circuit_id,
-            driver_id=driver_id,
-            qual_position=qual_position,
-            grid=grid
-        )
+      row_dict = build_feature_row(
+        df_feat=df_feat,
+        lineup_map=lineup_map,
+        circuit_id=circuit_id,
+        driver_id=driver_id,
+        qual_position=qual_position,
+        grid=grid,
+        df_raw=df_raw
+      )
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -1515,6 +1236,13 @@ def predict():
     out["context_adjustment"] = float(context_adjustment)
     out["resolved_constructor"] = row_dict["constructorId"]
 
+    out["driver_points_trend"] = row_dict.get("driver_points_trend", [0.0, 0.0, 0.0])
+    out["constructor_points_trend"] = row_dict.get("constructor_points_trend", [0.0, 0.0, 0.0])
+    out["driver_finish_trend"] = row_dict.get("driver_finish_trend", [AVG_FINISH_FALLBACK] * 3)
+    out["trend_labels"] = ["Race -3", "Race -2", "Race -1"]
+
+    print("DEBUG: out keys before jsonify:", list(out.keys())[-5:])
+    print("DEBUG: trend_labels value:", out.get("trend_labels"))
     return jsonify(out)
 
 if __name__ == "__main__":
