@@ -39,155 +39,908 @@ INDEX_HTML = """
     <title>F1 Podium Predictor</title>
     <style>
         :root {
-            color-scheme: light dark;
+            --bg: #0a0a0f;
+            --bg-soft: #11131a;
+            --card: rgba(255, 255, 255, 0.06);
+            --card-strong: rgba(255, 255, 255, 0.09);
+            --border: rgba(255, 255, 255, 0.10);
+            --text: #f5f7fb;
+            --muted: #b7bdc9;
+            --accent: #e10600;
+            --accent-2: #ff5a5f;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+            --radius-xl: 24px;
+            --radius-lg: 18px;
+            --radius-md: 14px;
+            --maxw: 1240px;
         }
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 32px 16px;
-            background: #f5f7fb;
-            color: #1a1a1a;
-        }
-        .container {
-            max-width: 860px;
-            margin: 0 auto;
-        }
-        .card {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-            margin-bottom: 20px;
-        }
-        h1, h2, h3 {
-            margin-top: 0;
-        }
-        .subtitle {
-            color: #555;
-            margin-bottom: 24px;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-        }
-        label {
-            font-weight: 600;
-            display: block;
-            margin-bottom: 8px;
-        }
-        input, select, button {
-            width: 100%;
-            padding: 12px;
-            border-radius: 10px;
-            border: 1px solid #d0d7de;
-            font-size: 15px;
+
+        * {
             box-sizing: border-box;
         }
-        button {
-            cursor: pointer;
-            font-weight: 700;
-            border: none;
-            background: #111827;
-            color: white;
-            margin-top: 8px;
+
+        html {
+            scroll-behavior: smooth;
         }
-        button:hover {
-            opacity: 0.92;
+
+        body {
+            margin: 0;
+            font-family: Inter, Arial, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(225, 6, 0, 0.22), transparent 28%),
+                radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent 18%),
+                linear-gradient(180deg, #090a0f 0%, #0d1017 55%, #090a0f 100%);
+            color: var(--text);
         }
-        .muted {
-            color: #666;
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .page-shell {
+            max-width: var(--maxw);
+            margin: 0 auto;
+            padding: 24px 20px 56px;
+        }
+
+        .topbar {
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 18px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+            backdrop-filter: blur(10px);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+        }
+
+        .topbar::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: -1px;
+            height: 3px;
+            width: 120px;
+            background: linear-gradient(90deg, #e10600, transparent);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+        }
+
+        .brand-mark {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            display: grid;
+            place-items: center;
+            font-size: 18px;
+            font-weight: 900;
+            box-shadow: 0 10px 24px rgba(225, 6, 0, 0.35);
+        }
+
+        .brand-sub {
+            font-size: 12px;
+            color: var(--muted);
+            font-weight: 500;
+            letter-spacing: 0.2px;
+        }
+
+        .nav {
+            display: flex;
+            gap: 18px;
+            color: var(--muted);
             font-size: 14px;
         }
-        .result-box {
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 18px;
-            background: #fafafa;
-            margin-top: 16px;
+
+        .nav a:hover {
+            color: var(--text);
         }
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+            border-radius: 30px;
+            padding: 50px 36px;
+            margin-bottom: 26px;
+
+            background:
+                linear-gradient(120deg, rgba(225, 6, 0, 0.35), rgba(10,10,15,0.9)),
+                #0a0a0f;
+
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: 0 30px 70px rgba(0,0,0,0.6);
+        }
+
+        .hero-bg-text {
+            position: absolute;
+            right: -40px;
+            top: 10px;
+            font-size: 180px;
+            font-weight: 900;
+            letter-spacing: -6px;
+            color: rgba(255,255,255,0.04);
+            pointer-events: none;
+        }
+
+        .hero::before {
+            content: "";
+            position: absolute;
+            right: -90px;
+            top: -90px;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,255,255,0.12), transparent 65%);
+            pointer-events: none;
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 28px;
+            align-items: center;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            margin-bottom: 16px;
+        }
+
+        .eyebrow-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #fff;
+        }
+
+        .hero h1 {
+            font-size: clamp(30px, 4.2vw, 54px);
+            line-height: 1.04;
+            margin: 0 0 14px;
+            letter-spacing: -1.2px;
+        }
+
+        .hero p {
+            margin: 0;
+            max-width: 700px;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.65;
+        }
+
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .hero-stat {
+            padding: 18px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--border);
+        }
+
+        .hero-stat-label {
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 8px;
+        }
+
+        .hero-stat-value {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.8px;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 0.92fr 1.08fr;
+            gap: 22px;
+            margin-bottom: 22px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .card-inner {
+            padding: 24px;
+        }
+
+        .card-inner::before {
+            content: "";
+            display: block;
+            width: 40px;
+            height: 3px;
+            background: #e10600;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            margin: 0 0 6px;
+            font-size: 24px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+        }
+
+        .section-subtitle {
+            margin: 0 0 22px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .field.full {
+            grid-column: span 2;
+        }
+
+        label {
+            font-size: 13px;
+            color: #e8ebf2;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 15px 15px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.05);
+            font-weight: 600;
+            color: var(--text);
+            font-size: 15px;
+            outline: none;
+        }
+
+        input:focus, select:focus {
+            border-color: rgba(225, 6, 0, 0.7);
+            box-shadow: 0 0 0 4px rgba(225, 6, 0, 0.15);
+        }
+
+        select option {
+            color: #111;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 22px;
+        }
+
+        button {
+            appearance: none;
+            border: none;
+            border-radius: 14px;
+            padding: 15px 18px;
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            opacity: 0.96;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #e10600, #ff3b3b);
+            color: white;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            box-shadow: 0 12px 30px rgba(225,6,0,0.4);
+            flex: 1;
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.08);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .helper-text {
+            margin-top: 14px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.07);
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 18px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--warning);
+            box-shadow: 0 0 18px rgba(245, 158, 11, 0.65);
+        }
+
+        .status.ready .status-dot {
+            background: var(--success);
+            box-shadow: 0 0 18px rgba(34, 197, 94, 0.65);
+        }
+
+        .status.error .status-dot {
+            background: var(--danger);
+            box-shadow: 0 0 18px rgba(239, 68, 68, 0.65);
+        }
+
+        .empty-state {
+            min-height: 360px;
+            display: grid;
+            place-items: center;
+            text-align: center;
+            border: 1px dashed rgba(255,255,255,0.12);
+            border-radius: 20px;
+            background: rgba(255,255,255,0.03);
+            color: var(--muted);
+            padding: 20px;
+        }
+
+        .empty-state h3 {
+            margin: 0 0 10px;
+            color: var(--text);
+            font-size: 22px;
+        }
+
+        .prediction-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .decision-card {
+            position: relative;
+            border-radius: 22px;
+            padding: 26px;
+            background:
+                linear-gradient(135deg, rgba(225,6,0,0.35), rgba(0,0,0,0.6)),
+                #111;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow:
+                0 25px 60px rgba(225,6,0,0.25),
+                inset 0 1px 0 rgba(255,255,255,0.06);
+        }
+
+        .decision-card::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 6px;
+            height: 100%;
+            background: #e10600;
+        }
+
+        .decision-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1.1px;
+            color: #ffd9d9;
+            margin-bottom: 12px;
+            font-weight: 800;
+        }
+
+        .decision-value {
+            font-size: clamp(30px, 3.1vw, 44px);
+            line-height: 1.06;
+            margin: 0 0 14px;
+            letter-spacing: -1.1px;
+            font-weight: 900;
+        }
+
+        .decision-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .meta-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 13px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.10);
+            font-size: 13px;
+            color: #f8fafc;
+            font-weight: 700;
+        }
+
+        .meta-chip.conf-high {
+            background: rgba(34, 197, 94, 0.16);
+            border-color: rgba(34, 197, 94, 0.30);
+        }
+
+        .meta-chip.conf-moderate {
+            background: rgba(59, 130, 246, 0.16);
+            border-color: rgba(59, 130, 246, 0.30);
+        }
+
+        .meta-chip.conf-low {
+            background: rgba(245, 158, 11, 0.18);
+            border-color: rgba(245, 158, 11, 0.30);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .metric-card {
+            padding: 20px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.10);
+            min-height: 108px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 11px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.9px;
+            line-height: 1.4;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.7px;
+            line-height: 1.1;
+        }
+
+        .split-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .subcard {
+            padding: 20px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+
+        .subcard h3 {
+            margin: 0 0 14px;
+            font-size: 17px;
+            letter-spacing: -0.3px;
+        }
+
+        .subcard p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.65;
+            font-size: 14px;
+        }
+
+        .pill-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
         .pill {
-            display: inline-block;
-            padding: 6px 10px;
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 12px;
             border-radius: 999px;
             font-size: 13px;
             font-weight: 700;
-            margin-right: 8px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.10);
+            color: #f3f6fb;
+        }
+
+        ul.clean-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 10px;
+        }
+
+        ul.clean-list li {
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #eef2f8;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        details {
+            border-radius: 18px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        summary {
+            cursor: pointer;
+            list-style: none;
+            padding: 18px 20px;
+            font-weight: 800;
+            font-size: 15px;
+        }
+
+        summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .details-content {
+            padding: 0 20px 20px;
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .tech-item {
+            padding: 14px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .tech-item strong {
+            display: block;
+            font-size: 12px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
             margin-bottom: 8px;
-            background: #e5e7eb;
         }
-        .error {
-            color: #b00020;
-            font-weight: 600;
+
+        .tech-item span {
+            font-weight: 800;
+            color: var(--text);
+            font-size: 16px;
         }
-        ul {
-            padding-left: 20px;
-        }
+
         pre {
+            margin: 0;
             white-space: pre-wrap;
             word-wrap: break-word;
-            background: #0f172a;
+            background: #090b11;
             color: #f8fafc;
-            padding: 14px;
-            border-radius: 10px;
+            padding: 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.08);
             overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.55;
         }
-        @media (max-width: 600px) {
-            body {
-                padding: 16px 12px;
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .info-card {
+            padding: 20px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+        }
+
+        .info-card h3 {
+            margin: 0 0 10px;
+            font-size: 18px;
+            letter-spacing: -0.4px;
+        }
+
+        .info-card p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .footer-note {
+            margin-top: 22px;
+            color: var(--muted);
+            text-align: center;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .error-text {
+            color: #ffd6d6;
+        }
+
+        @media (max-width: 1100px) {
+            .hero-grid,
+            .main-grid,
+            .info-grid {
+                grid-template-columns: 1fr;
             }
-            .card {
+
+            .metrics-grid,
+            .split-grid,
+            .tech-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .page-shell {
+                padding: 16px 14px 40px;
+            }
+
+            .topbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .nav {
+                flex-wrap: wrap;
+            }
+
+            .hero {
+                padding: 28px 20px;
+            }
+
+            .card-inner {
                 padding: 18px;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .field.full {
+                grid-column: span 1;
+            }
+
+            .hero-stats {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <h1>F1 Podium Predictor</h1>
-            <p class="subtitle">
-                Prototype interface for the Formula 1 podium prediction system.
-                Enter a circuit, driver, qualifying position, and grid position to request a prediction from the Flask backend.
-            </p>
+    <div class="page-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">F1</div>
+                <div>
+                    <div>F1 Podium Predictor</div>
+                    <div class="brand-sub">Machine learning prototype for podium probability prediction</div>
+                </div>
+            </div>
+            <nav class="nav">
+                <a href="#predictor">Predictor</a>
+                <a href="#insights">Insights</a>
+                <a href="#technical">Model Breakdown</a>
+            </nav>
+        </header>
 
-            <form id="predict-form">
-                <div class="grid">
-                    <div>
-                        <label for="circuitId">Circuit</label>
-                        <select id="circuitId" name="circuitId" required></select>
+        <section class="hero">
+            <div class="hero-bg-text">PODIUM</div>
+            <div class="hero-grid">
+                <div>
+                    <div class="eyebrow">
+                        <span class="eyebrow-dot"></span>
+                        Formula 1 Race Outcome Analytics
                     </div>
-                    <div>
-                        <label for="driverId">Driver</label>
-                        <select id="driverId" name="driverId" required></select>
+                    <h1>Race to the Podium</h1>
+                    <p>
+                        Predict Formula 1 podium potential using historical race performance,
+                        constructor momentum, track-specific indicators, and race-context inputs
+                        such as qualifying and grid position.
+                    </p>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat">
+                        <div class="hero-stat-label">Model Type</div>
+                        <div class="hero-stat-value">Gradient Boosting</div>
                     </div>
-                    <div>
-                        <label for="qual_position">Qualifying Position</label>
-                        <input type="number" id="qual_position" name="qual_position" min="1" max="20" required />
+                    <div class="hero-stat">
+                        <div class="hero-stat-label">Prediction Focus</div>
+                        <div class="hero-stat-value">Podium Probability</div>
                     </div>
-                    <div>
-                        <label for="grid">Grid Position</label>
-                        <input type="number" id="grid" name="grid" min="1" max="20" required />
+                    <div class="hero-stat">
+                        <div class="hero-stat-label">Feature Basis</div>
+                        <div class="hero-stat-value">Track + Form + Grid</div>
+                    </div>
+                    <div class="hero-stat">
+                        <div class="hero-stat-label">System Output</div>
+                        <div class="hero-stat-value">Explainable Result</div>
                     </div>
                 </div>
-                <button type="submit">Predict Podium Probability</button>
-            </form>
-            <p class="muted">
-                Enter a circuit, driver, qualifying position, and grid position to simulate a podium prediction using the 2025 lineup.
-            </p>
-        </div>
+            </div>
+        </section>
 
-        <div class="card">
-            <h2>Prediction Result</h2>
-            <div id="status" class="muted">Waiting for input.</div>
-            <div id="result"></div>
+        <section id="predictor" class="main-grid">
+            <div class="card">
+                <div class="card-inner">
+                    <h2 class="section-title">Race Setup</h2>
+                    <p class="section-subtitle">
+                        Select a circuit and driver, then enter qualifying and starting grid positions
+                        to generate a podium probability estimate for the race scenario.
+                    </p>
+
+                    <form id="predict-form">
+                        <div class="form-grid">
+                            <div class="field full">
+                                <label for="circuitId">Circuit</label>
+                                <select id="circuitId" name="circuitId" required></select>
+                            </div>
+
+                            <div class="field full">
+                                <label for="driverId">Driver</label>
+                                <select id="driverId" name="driverId" required></select>
+                            </div>
+
+                            <div class="field">
+                                <label for="qual_position">Qualifying Position</label>
+                                <input type="number" id="qual_position" name="qual_position" min="1" max="20" required />
+                            </div>
+
+                            <div class="field">
+                                <label for="grid">Grid Position</label>
+                                <input type="number" id="grid" name="grid" min="1" max="20" required />
+                            </div>
+                        </div>
+
+                        <div class="button-row">
+                            <button type="submit" class="btn-primary">Run Podium Analysis</button>
+                            <button type="button" class="btn-secondary" id="reset-btn">Reset</button>
+                        </div>
+                    </form>
+
+                    <p class="helper-text">
+                        This interface is designed for presentation and demonstration purposes.
+                        The output combines the model estimate with race-context adjustments and
+                        explainability signals.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-inner">
+                    <div id="statusWrap" class="status">
+                        <span class="status-dot"></span>
+                        <span id="statusText">Loading available circuits and drivers...</span>
+                    </div>
+
+                    <div id="result" class="empty-state">
+                        <div>
+                            <h3>Prediction Ready</h3>
+                            <p>
+                                Once you submit a race scenario, the system will display the decision,
+                                probability breakdown, supporting signals, risk signals, and technical evidence.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="insights" class="info-grid">
+            <div class="info-card">
+                <h3>Model Overview</h3>
+                <p>
+                    The system uses a Gradient Boosting classifier trained on historical Formula 1 data
+                    from the 2022–2025 regulation period to estimate podium likelihood.
+                </p>
+            </div>
+
+            <div class="info-card">
+                <h3>Key Signals</h3>
+                <p>
+                    Predictions are influenced by recent driver form, constructor momentum, track history,
+                    qualifying position, starting grid position, and race consistency indicators.
+                </p>
+            </div>
+
+            <div class="info-card">
+                <h3>Explainability Layer</h3>
+                <p>
+                    The output includes supporting factors, risk factors, contradiction notes,
+                    and a natural language explanation to improve interpretability during evaluation.
+                </p>
+            </div>
+        </section>
+
+        <div class="footer-note">
+            F1 Podium Predictor — presentation-ready prototype for podium prediction and explainable race analytics.
         </div>
     </div>
 
     <script>
         const form = document.getElementById("predict-form");
-        const statusBox = document.getElementById("status");
         const resultBox = document.getElementById("result");
+        const resetBtn = document.getElementById("reset-btn");
+        const statusWrap = document.getElementById("statusWrap");
+        const statusText = document.getElementById("statusText");
+
+        function setStatus(message, type = "default") {
+            statusWrap.className = "status";
+            if (type === "ready") statusWrap.classList.add("ready");
+            if (type === "error") statusWrap.classList.add("error");
+            statusText.textContent = message;
+        }
 
         function setOptions(selectEl, values) {
             selectEl.innerHTML = "";
@@ -199,90 +952,201 @@ INDEX_HTML = """
             });
         }
 
+        function fmtNum(value, digits = 2) {
+            return typeof value === "number" ? value.toFixed(digits) : "N/A";
+        }
+
+        function titleCase(value) {
+            if (!value) return "N/A";
+            return value.charAt(0).toUpperCase() + value.slice(1);
+        }
+
+        function getConfidenceClass(confidence) {
+            if (!confidence) return "";
+            const c = confidence.toLowerCase();
+            if (c.includes("high")) return "conf-high";
+            if (c.includes("moderate")) return "conf-moderate";
+            if (c.includes("low")) return "conf-low";
+            return "";
+        }
+
+        function renderList(items) {
+            if (!items || !items.length) {
+                return "<ul class='clean-list'><li>No items available.</li></ul>";
+            }
+            return `<ul class="clean-list">${items.map(item => `<li>${item}</li>`).join("")}</ul>`;
+        }
+
         function renderPrediction(data) {
             const probabilityPct = (data.probability * 100).toFixed(1);
             const rawProbabilityPct = typeof data.raw_probability === "number"
                 ? (data.raw_probability * 100).toFixed(1)
-                : null;
+                : "N/A";
             const adjustedProbabilityPct = typeof data.adjusted_probability === "number"
                 ? (data.adjusted_probability * 100).toFixed(1)
-                : null;
+                : "N/A";
             const adjustmentPts = typeof data.context_adjustment === "number"
                 ? (data.context_adjustment * 100).toFixed(1)
-                : null;
+                : "N/A";
 
             const signals = data.signals || {};
             const facts = data.facts || {};
-            const fmt = (value) => (typeof value === "number" ? value.toFixed(2) : "N/A");
 
+            resultBox.className = "prediction-panel";
             resultBox.innerHTML = `
-                <div class="result-box">
-                    <h3>${data.decision} (${probabilityPct}%)</h3>
-                    ${rawProbabilityPct !== null ? `<p><strong>Raw Model Probability:</strong> ${rawProbabilityPct}%</p>` : ""}
-                    ${adjustedProbabilityPct !== null ? `<p><strong>Context-Adjusted Probability:</strong> ${adjustedProbabilityPct}%</p>` : ""}
-                    ${adjustmentPts !== null ? `<p><strong>Context Adjustment:</strong> ${adjustmentPts}% points</p>` : ""}
-                    <p><strong>Confidence:</strong> ${data.confidence_level}</p>
-                    <p><strong>Threshold:</strong> ${data.decision_threshold}</p>
-                    <p><strong>Summary:</strong> ${data.summary}</p>
-                    <p><strong>Model Insight:</strong> ${data.explanation_short}</p>
+                <div class="decision-card">
+                    <div class="decision-label">Podium Projection</div>
+                    <h2 class="decision-value">${data.decision} (${probabilityPct}%)</h2>
+                    <div class="decision-meta">
+                        <span class="meta-chip ${getConfidenceClass(data.confidence_level)}">Confidence: ${data.confidence_level || "N/A"}</span>
+                        <span class="meta-chip">Constructor: ${titleCase(data.resolved_constructor)}</span>
+                    </div>
+                </div>
 
-                    <div>
-                        <span class="pill">Driver Form: ${signals.driver_form ?? "N/A"}</span>
-                        <span class="pill">Constructor Momentum: ${signals.constructor_momentum ?? "N/A"}</span>
-                        <span class="pill">Grid Positioning: ${signals.grid_positioning ?? "N/A"}</span>
-                        <span class="pill">Consistency: ${signals.consistency ?? "N/A"}</span>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Raw Model Probability</div>
+                        <div class="metric-value">${rawProbabilityPct}%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Context-Adjusted Probability</div>
+                        <div class="metric-value">${adjustedProbabilityPct}%</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Adjustment Impact</div>
+                        <div class="metric-value">${adjustmentPts}%</div>
+                    </div>
+                </div>
+
+                <div class="subcard">
+                    <h3>Model Insight</h3>
+                    <p>${data.explanation_short || "No short explanation available."}</p>
+                </div>
+
+                <div class="split-grid">
+                    <div class="subcard">
+                        <h3>Explanation</h3>
+                        <p>${data.explanation || "No explanation available."}</p>
                     </div>
 
-                    <h3>Explanation</h3>
-                    <p>${data.explanation || "No explanation available."}</p>
-
-                    ${data.contradiction_note ? `<p><strong>Model Note:</strong> ${data.contradiction_note}</p>` : ""}
-
-                    <h3>Key Supporting Factors</h3>
-                    <ul>${(data.main_support || []).map(item => `<li>${item}</li>`).join("")}</ul>
-
-                    <h3>Primary Risk Factors</h3>
-                    <ul>${(data.main_risks || []).map(item => `<li>${item}</li>`).join("")}</ul>
-                    
-                    <h3>Positive Factors</h3>
-                    <ul>${(data.positive_factors || []).map(item => `<li>${item}</li>`).join("")}</ul>
-                    
-                    <h3>Risk Factors</h3>
-                    <ul>${(data.risk_factors || []).map(item => `<li>${item}</li>`).join("")}</ul>
-
-                    <h3>Model Evidence</h3>
-                    <ul>
-                        <li>Grid Position: ${facts.grid ?? "N/A"}</li>
-                        <li>Qualifying Position: ${facts.qual_position ?? "N/A"}</li>
-                        <li>Driver Points (Last 3): ${fmt(facts.driver_points_last3)}</li>
-                        <li>Constructor Points (Last 3): ${fmt(facts.constructor_points_last3)}</li>
-                        <li>Driver Podiums (Last 3): ${fmt(facts.driver_podiums_last3)}</li>
-                        <li>Driver Avg Finish (Last 3): ${fmt(facts.driver_finishpos_last3)}</li>
-                    </ul>
-
-                    <h3>Debug Data</h3>
-                    <pre>${JSON.stringify(facts, null, 2)}</pre>
+                    <div class="subcard">
+                        <h3>Performance Signals</h3>
+                        <div class="pill-row">
+                            <span class="pill">Driver Form: ${signals.driver_form ?? "N/A"}</span>
+                            <span class="pill">Constructor Momentum: ${signals.constructor_momentum ?? "N/A"}</span>
+                            <span class="pill">Grid Positioning: ${signals.grid_positioning ?? "N/A"}</span>
+                            <span class="pill">Consistency: ${signals.consistency ?? "N/A"}</span>
+                        </div>
+                    </div>
                 </div>
+
+                <div class="split-grid">
+                    <div class="subcard">
+                        <h3>Key Supporting Factors</h3>
+                        ${renderList(data.main_support)}
+                    </div>
+
+                    <div class="subcard">
+                        <h3>Primary Risk Factors</h3>
+                        ${renderList(data.main_risks)}
+                    </div>
+                </div>
+
+                ${data.contradiction_note ? `
+                    <div class="subcard">
+                        <h3>Contradiction Insight</h3>
+                        <p>${data.contradiction_note}</p>
+                    </div>
+                ` : ""}
+
+                <details id="technical">
+                    <summary>Model Breakdown</summary>
+                    <div class="details-content">
+                        <div class="tech-grid">
+                            <div class="tech-item">
+                                <strong>Decision Threshold</strong>
+                                <span>${data.decision_threshold ?? "N/A"}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Grid Position</strong>
+                                <span>${facts.grid ?? "N/A"}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Qualifying Position</strong>
+                                <span>${facts.qual_position ?? "N/A"}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Driver Points (Last 3)</strong>
+                                <span>${fmtNum(facts.driver_points_last3)}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Constructor Points (Last 3)</strong>
+                                <span>${fmtNum(facts.constructor_points_last3)}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Driver Podiums (Last 3)</strong>
+                                <span>${fmtNum(facts.driver_podiums_last3)}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Driver Avg Finish (Last 3)</strong>
+                                <span>${fmtNum(facts.driver_finishpos_last3)}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Driver Track Avg Finish</strong>
+                                <span>${fmtNum(facts.driver_track_avg_finish)}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Driver Track Podium Rate</strong>
+                                <span>${fmtNum(facts.driver_track_podium_rate)}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Constructor Track Avg Finish</strong>
+                                <span>${fmtNum(facts.constructor_track_avg_finish)}</span>
+                            </div>
+                            <div class="tech-item">
+                                <strong>Constructor Track Podium Rate</strong>
+                                <span>${fmtNum(facts.constructor_track_podium_rate)}</span>
+                            </div>
+                        </div>
+
+                        <pre>${JSON.stringify(facts, null, 2)}</pre>
+                    </div>
+                </details>
             `;
         }
 
+        function resetUI() {
+            form.reset();
+            resultBox.className = "empty-state";
+            resultBox.innerHTML = `
+                <div>
+                    <h3>Prediction Ready</h3>
+                    <p>
+                        Once you submit a race scenario, the system will display the decision,
+                        probability breakdown, supporting signals, risk signals, and technical evidence.
+                    </p>
+                </div>
+            `;
+            setStatus("Ready. Select race inputs and generate a prediction.", "ready");
+        }
+
         async function loadMetadata() {
-            statusBox.textContent = "Loading available circuits and drivers...";
+            setStatus("Loading available circuits and drivers...");
             try {
                 const response = await fetch("/metadata");
                 const data = await response.json();
 
                 if (!data.drivers || !data.circuits) {
-                    statusBox.innerHTML = '<span class="error">No metadata available.</span>';
+                    setStatus("No metadata available.", "error");
                     return;
                 }
 
                 setOptions(document.getElementById("circuitId"), data.circuits);
                 setOptions(document.getElementById("driverId"), data.drivers);
 
-                statusBox.textContent = "Ready. Select race inputs and run a prediction.";
+                setStatus("Ready. Select race inputs and generate a prediction.", "ready");
             } catch (error) {
-                statusBox.innerHTML = `<span class="error">Failed to load metadata: ${error.message}</span>`;
+                setStatus(`Failed to load metadata: ${error.message}`, "error");
             }
         }
 
@@ -294,8 +1158,14 @@ INDEX_HTML = """
             const qual_position = document.getElementById("qual_position").value;
             const grid = document.getElementById("grid").value;
 
-            statusBox.textContent = "Generating prediction...";
-            resultBox.innerHTML = "";
+            setStatus("Generating prediction...");
+            resultBox.className = "empty-state";
+            resultBox.innerHTML = `
+                <div>
+                    <h3>Running Prediction</h3>
+                    <p>The system is processing the selected race scenario.</p>
+                </div>
+            `;
 
             const params = new URLSearchParams({
                 circuitId,
@@ -312,12 +1182,21 @@ INDEX_HTML = """
                     throw new Error(data.error || "Prediction request failed.");
                 }
 
-                statusBox.textContent = "Prediction completed successfully.";
                 renderPrediction(data);
+                setStatus("Prediction completed successfully.", "ready");
             } catch (error) {
-                statusBox.innerHTML = `<span class="error">${error.message}</span>`;
+                resultBox.className = "empty-state";
+                resultBox.innerHTML = `
+                    <div>
+                        <h3 class="error-text">Prediction Failed</h3>
+                        <p class="error-text">${error.message}</p>
+                    </div>
+                `;
+                setStatus("Prediction failed. Please review the input values.", "error");
             }
         });
+
+        resetBtn.addEventListener("click", resetUI);
 
         loadMetadata();
     </script>
@@ -400,18 +1279,18 @@ def generate_prediction_output(row_dict, podium_proba, threshold=THRESHOLD, raw_
 
     # base confidence from probability
     if podium_proba >= 0.75 or podium_proba <= 0.15:
-        confidence = "High"
+        confidence = "High Confidence"
     elif podium_proba >= 0.55 or podium_proba <= 0.30:
-        confidence = "Moderate"
+        confidence = "Moderate Confidence"
     else:
-        confidence = "Low"
+        confidence = "Low Confidence"
 
     # adjust confidence based on disagreement
     if raw_proba is not None and context_adjustment is not None:
         if abs(context_adjustment) > 0.25:
-            confidence = "Low (Model and contextual factors are in conflict)"
+            confidence = "Low Confidence (Model and contextual factors are in conflict)"
         elif abs(context_adjustment) > 0.15:
-            confidence = "Moderate (Some conflict between model and context)"
+            confidence = "Moderate Confidence (Some conflict between model and context)"
 
     facts = {
         "grid": int(row_dict["grid"]),
