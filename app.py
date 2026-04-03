@@ -900,25 +900,29 @@ $('pform').addEventListener('submit', async e=>{
   finally { btn.disabled=false; }
 });
 
-async function loadMeta() {
-  try {
-    const res=await fetch('/metadata');
-    const data=await res.json();
-    if(data.circuits){
-      const sc=$('circuitId'); sc.innerHTML='';
-      data.circuits.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase()); sc.appendChild(o); });
-      $('stat-circuits').textContent=data.circuits.length;
+async function loadMetadata() {
+    statusBox.textContent = "Loading available circuits and drivers...";
+    try {
+        const response = await fetch("/metadata");
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const data = await response.json();
+
+        if (!data.drivers?.length || !data.circuits?.length) {
+            statusBox.innerHTML = '<span class="error">Metadata loaded but lists are empty. Check server logs.</span>';
+            return;
+        }
+
+        setOptions(document.getElementById("circuitId"), data.circuits);
+        setOptions(document.getElementById("driverId"), data.drivers);
+        statusBox.textContent = "Ready. Select race inputs and run a prediction.";
+    } catch (error) {
+        statusBox.innerHTML = `<span class="error">Failed to load metadata: ${error.message}</span>`;
     }
-    if(data.drivers){
-      const sd=$('driverId'); sd.innerHTML='';
-      data.drivers.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase()); sd.appendChild(o); });
-    }
-  } catch(e){ console.warn('Metadata unavailable:',e.message); }
 }
       $('stat-drivers').textContent=data.drivers.length;
 
 ui('idle');
-loadMeta();
+loadMetadata();
 </script>
 </body>
 </html>
@@ -1173,12 +1177,11 @@ def health():
 
 @app.get("/metadata")
 def metadata():
-    drivers = sorted(df_feat[df_feat["season"] == 2025]["driverId"].dropna().unique().tolist())
+    # Fall back to all seasons if 2025 has no data yet
+    drivers_2025 = df_feat[df_feat["season"] == 2025]["driverId"].dropna().unique().tolist()
+    drivers = sorted(drivers_2025 if drivers_2025 else df_feat["driverId"].dropna().unique().tolist())
     circuits = sorted(df_feat["circuitId"].dropna().unique().tolist())
-    return jsonify({
-        "drivers": drivers,
-        "circuits": circuits
-    })
+    return jsonify({"drivers": drivers, "circuits": circuits})
 
 @app.get("/predict")
 def predict():
