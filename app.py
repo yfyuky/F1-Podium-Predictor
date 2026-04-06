@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, send_from_directory
 from flask_cors import CORS
 import pandas as pd
 import joblib
@@ -71,10 +71,10 @@ INDEX_HTML = r"""
       height: 56px; display: flex; align-items: center; padding: 0 32px; gap: 32px;
     }
     .f1-badge {
-      background: var(--red); color: white;
-      padding: 5px 11px 5px 9px;
-      clip-path: polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
-      font-size: 14px; font-weight: 900; letter-spacing: 0.05em;
+      height: 28px;
+      width: auto;
+      display: block;
+      object-fit: contain;
     }
     .nav-title {
       font-size: 11px; font-weight: 700;
@@ -390,98 +390,13 @@ INDEX_HTML = r"""
     ::-webkit-scrollbar-track { background: var(--bg); }
     ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
 
-    /* Decision Thresholds Table */
-    .threshold-section {
-      margin-top: 30px;
-      padding: 32px 28px;
-      background: var(--bg-raised);
-      border-top: 1px solid var(--border);
-    }
-    .threshold-section .section-title {
-      font-size: clamp(24px, 3vw, 32px);
-      font-weight: 900;
-      letter-spacing: -0.02em;
-      margin-bottom: 8px;
-      text-transform: uppercase;
-    }
-    .threshold-section .section-subtitle {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--g2);
-      margin-bottom: 22px;
-    }
-    .threshold-table {
-      margin-top: 16px;
-      border-radius: 0;
-      overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.04);
-    }
-    .threshold-row {
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr 2fr;
-      padding: 16px 18px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      font-size: 14px;
-      color: var(--white);
-    }
-    .threshold-row:last-child {
-      border-bottom: none;
-    }
-    .threshold-row.header {
-      background: rgba(255,255,255,0.08);
-      font-weight: 800;
-      text-transform: uppercase;
-      font-size: 12px;
-      letter-spacing: 0.6px;
-      color: #e10600;
-      border-left: 4px solid #e10600;
-    }
-    .threshold-row div {
-      display: flex;
-      align-items: center;
-    }
-    
-    /* Mini Bar Charts */
-    .form-charts {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-top: 20px;
-      margin-bottom: 20px;
-    }
-    .chart-box {
-      padding: 16px;
-      background: rgba(255,255,255,0.05);
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-    .chart-box h3 {
-      margin: 0 0 14px;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.6px;
-      text-transform: uppercase;
-      color: #e10600;
-    }
-    .chart-box canvas {
-      width: 100% !important;
-      height: 120px !important;
-    }
   </style>
 </head>
 <body>
 
 <nav>
-  <span class="f1-badge">F1</span>
+  <img src="/images/images.png" alt="F1" class="f1-badge" />
   <span class="nav-title">Podium Predictor</span>
-  <div class="nav-links">
-    <a href="#" class="active">Predict</a>
-    <a href="#">2025 Season</a>
-    <a href="#">Model</a>
-  </div>
 </nav>
 
 <div class="hero">
@@ -646,44 +561,593 @@ INDEX_HTML = r"""
   </main>
 </div>
 
-<div class="threshold-section">
-  <h2 class="section-title">Decision Thresholds</h2>
-  <p class="section-subtitle">
-    The model categorizes podium potential based on probability ranges.
+<!-- ═══════════════════════════════════════════════════════
+     GRID VISUALISER + INFO SECTIONS
+     ═══════════════════════════════════════════════════════ -->
+<style>
+  /* ── shared section chrome ── */
+  .info-section {
+    background: var(--bg-raised);
+    border-top: 1px solid var(--border);
+    padding: 52px 40px;
+  }
+  .info-section + .info-section { border-top: 1px solid var(--border); }
+  .info-eyebrow {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.35em;
+    text-transform: uppercase; color: var(--red); margin-bottom: 10px;
+  }
+  .info-title {
+    font-size: clamp(28px,4vw,44px); font-weight: 900;
+    letter-spacing: -0.02em; text-transform: uppercase;
+    line-height: 0.95; margin-bottom: 10px;
+  }
+  .info-sub {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--g2); margin-bottom: 36px;
+  }
+
+  /* ── grid viz ── */
+  .grid-wrap {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    max-width: 680px;
+  }
+  .grid-slot {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    padding: 10px 14px; position: relative; overflow: hidden;
+    transition: border-color .15s;
+  }
+  .grid-slot:hover { border-color: var(--border-hi); }
+  .grid-slot.podium { border-left: 3px solid var(--red); }
+  .grid-slot.podium .gs-num { color: var(--red); }
+  .gs-num {
+    font-size: 22px; font-weight: 900; width: 32px;
+    flex-shrink: 0; color: var(--g3); line-height: 1;
+  }
+  .gs-bar-wrap { flex: 1; }
+  .gs-label {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--g2); margin-bottom: 5px;
+  }
+  .gs-bar {
+    height: 3px; background: var(--border-hi);
+    position: relative; overflow: hidden;
+  }
+  .gs-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    background: var(--red); opacity: 0.5;
+  }
+  .gs-pts {
+    font-size: 11px; font-weight: 900; color: var(--g2);
+    width: 36px; text-align: right; flex-shrink: 0;
+  }
+  .gs-pts.has-pts { color: var(--white); }
+  .grid-note {
+    margin-top: 20px; font-size: 12px; color: var(--g2);
+    line-height: 1.7; max-width: 640px;
+  }
+  .grid-note strong { color: var(--white); }
+
+  /* ── points table ── */
+  .pts-table-wrap {
+    overflow-x: auto;
+  }
+  .pts-table {
+    width: 100%; border-collapse: collapse;
+    min-width: 520px;
+  }
+  .pts-table thead tr {
+    background: rgba(232,0,45,0.12);
+    border-bottom: 2px solid var(--red);
+  }
+  .pts-table th {
+    padding: 12px 16px; font-size: 9px; font-weight: 700;
+    letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--red); text-align: left;
+  }
+  .pts-table td {
+    padding: 11px 16px; font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    color: var(--g1);
+  }
+  .pts-table tr:last-child td { border-bottom: none; }
+  .pts-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .pts-table td.pos-num {
+    font-size: 18px; font-weight: 900; width: 56px;
+    color: var(--g3);
+  }
+  .pts-table tr.podium-row td { color: var(--white); }
+  .pts-table tr.podium-row td.pos-num { color: var(--red); }
+  .pts-table td.pts-val {
+    font-weight: 900; font-size: 15px;
+  }
+  .pts-table tr.podium-row td.pts-val { color: var(--red); }
+  .pts-bar-cell { width: 200px; }
+  .pts-bar {
+    height: 4px; background: var(--border-hi);
+    border-radius: 0; overflow: hidden;
+  }
+  .pts-bar-fill {
+    height: 100%; background: var(--red);
+    opacity: 0.6;
+  }
+  .pts-table tr.podium-row .pts-bar-fill { opacity: 1; }
+
+  /* ── two column layout for info sections ── */
+  .info-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .info-two-col { grid-template-columns: 1fr; gap: 28px; }
+    .grid-wrap { grid-template-columns: 1fr; }
+    .info-section { padding: 36px 20px; }
+  }
+
+  /* ── F1 overview cards ── */
+  .overview-cards {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    gap: 1px; background: var(--border); margin-bottom: 32px;
+  }
+  @media (max-width: 860px) { .overview-cards { grid-template-columns: 1fr; } }
+  .ov-card { background: var(--bg-card); padding: 22px 20px; }
+  .ov-icon { font-size: 26px; margin-bottom: 12px; }
+  .ov-title {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.25em;
+    text-transform: uppercase; color: var(--red); margin-bottom: 8px;
+  }
+  .ov-body {
+    font-size: 13px; color: var(--g1); line-height: 1.75; font-weight: 300;
+  }
+  .ov-body strong { color: var(--white); font-weight: 700; }
+
+  /* ── race factors ── */
+  .factors-grid {
+    display: grid; grid-template-columns: repeat(2,1fr);
+    gap: 12px;
+  }
+  @media (max-width: 860px) { .factors-grid { grid-template-columns: 1fr; } }
+  .factor-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    padding: 20px; display: flex; gap: 16px; align-items: flex-start;
+  }
+  .factor-card-icon {
+    font-size: 28px; flex-shrink: 0; width: 40px;
+    text-align: center; margin-top: 2px;
+  }
+  .factor-card-body {}
+  .factor-card-title {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.25em;
+    text-transform: uppercase; color: var(--white); margin-bottom: 7px;
+  }
+  .factor-card-desc {
+    font-size: 13px; color: var(--g1); line-height: 1.7; font-weight: 300;
+  }
+  .factor-card-desc strong { color: var(--white); font-weight: 700; }
+  .factor-impact {
+    display: inline-block; margin-top: 8px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.2em;
+    text-transform: uppercase; padding: 3px 8px; border: 1px solid;
+  }
+  .impact-high   { color: var(--red);   border-color: var(--red);   background: var(--red-dim); }
+  .impact-medium { color: #fbbf24; border-color: #fbbf24; background: rgba(251,191,36,0.08); }
+  .impact-low    { color: #60a5fa; border-color: #60a5fa; background: rgba(96,165,250,0.08); }
+
+  /* ── threshold table (kept, restyled) ── */
+  .threshold-table {
+    border: 1px solid var(--border); overflow: hidden;
+  }
+  .threshold-row {
+    display: grid; grid-template-columns: 1.4fr 0.6fr 2fr;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px; color: var(--g1);
+    gap: 12px;
+  }
+  .threshold-row:last-child { border-bottom: none; }
+  .threshold-row.t-header {
+    background: rgba(232,0,45,0.10);
+    border-left: 3px solid var(--red);
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--red);
+  }
+  .threshold-row div { display: flex; align-items: center; }
+</style>
+
+<!-- ═══ SECTION 1 — GRID VISUALISER ═══ -->
+<div class="info-section" style="background: var(--bg);">
+  <div class="info-eyebrow">Starting Grid · Race Day</div>
+  <h2 class="info-title">Grid Positions &amp;<br>Points Breakdown</h2>
+  <p class="info-sub">How grid placement translates to championship points</p>
+
+  <div class="info-two-col">
+
+    <!-- Left: grid viz -->
+    <div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:var(--g2);margin-bottom:14px;">Starting Grid — Top 20 Positions</div>
+      <div class="grid-wrap" id="grid-viz">
+        <!-- Built by JS below -->
+      </div>
+      <p class="grid-note">
+        The <strong>starting grid</strong> is determined by qualifying results.
+        <strong>Pole position (P1)</strong> places the driver at the very front
+        and statistically offers the highest chance of a race win.
+        Positions <strong>P1–P3</strong> sit on the clean racing line, avoiding
+        the dirty air and debris that affects drivers further back.
+        <strong>Grid penalties</strong> (engine changes, gearbox replacements)
+        can drop a driver several places regardless of their qualifying time.
+      </p>
+    </div>
+
+    <!-- Right: points table -->
+    <div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:var(--g2);margin-bottom:14px;">F1 Points System — 2025</div>
+      <div class="pts-table-wrap">
+        <table class="pts-table">
+          <thead>
+            <tr>
+              <th>Pos</th>
+              <th>Driver / Team</th>
+              <th>Points</th>
+              <th class="pts-bar-cell">Distribution</th>
+            </tr>
+          </thead>
+          <tbody id="pts-tbody">
+            <!-- Built by JS -->
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:14px;font-size:12px;color:var(--g2);line-height:1.7;">
+        ✦ Sprint races award <strong style="color:var(--white);">half-points</strong> for the top 8 finishers.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ SECTION 2 — F1 OVERVIEW ═══ -->
+<div class="info-section">
+  <div class="info-eyebrow">Formula 1 · The Basics</div>
+  <h2 class="info-title">Understanding<br>Formula 1</h2>
+  <p class="info-sub">Key concepts that shape every race weekend</p>
+
+  <div class="overview-cards">
+
+    <div class="ov-card">
+      <div class="ov-icon">🏎️</div>
+      <div class="ov-title">The Race Weekend</div>
+      <div class="ov-body">
+        A standard F1 weekend runs across <strong>three days</strong>.
+        <strong>Friday</strong> brings two free practice sessions.
+        <strong>Saturday</strong> has a final practice followed by <strong>qualifying</strong>,
+        which sets the grid order. <strong>Sunday</strong> is race day — typically
+        around 305 km (or ~2 hours maximum). Sprint weekends replace
+        one practice with a Sprint Qualifying and a shorter Sprint Race
+        on Saturday worth half points.
+      </div>
+    </div>
+
+    <div class="ov-card">
+      <div class="ov-icon">⏱️</div>
+      <div class="ov-title">Qualifying Explained</div>
+      <div class="ov-body">
+        Qualifying is split into <strong>Q1, Q2, and Q3</strong>. All 20 drivers
+        compete in Q1 — the 5 slowest are eliminated and start P16–P20.
+        Q2 eliminates another 5, starting P11–P15. The remaining <strong>10 drivers
+        battle in Q3</strong> for pole position. Your single fastest lap time across
+        a session determines your grid slot. Tyre compounds used in Q2 must
+        be started on in the race — a crucial strategic consideration.
+      </div>
+    </div>
+
+    <div class="ov-card">
+      <div class="ov-icon">🔄</div>
+      <div class="ov-title">Tyre Strategy</div>
+      <div class="ov-body">
+        Pirelli supplies <strong>three dry compounds</strong> per race weekend —
+        Soft (fastest, least durable), Medium, and Hard. Teams must use
+        <strong>at least two different compounds</strong> during a dry race, forcing
+        at least one pit stop. Strategy decisions around when to pit,
+        which compound to switch to, and how many stops to make can
+        swing a race result dramatically — sometimes more than raw pace.
+      </div>
+    </div>
+
+    <div class="ov-card">
+      <div class="ov-icon">🏆</div>
+      <div class="ov-title">Championship Structure</div>
+      <div class="ov-body">
+        Two titles are contested simultaneously — the <strong>Drivers' Championship</strong>
+        and the <strong>Constructors' Championship</strong>. Both drivers from a team contribute
+        points to their constructor total. With <strong>24 races</strong> in 2025,
+        the maximum possible points haul is 936 for a single driver
+        (including fastest laps). Consistency across a full season matters
+        as much as individual race victories.
+      </div>
+    </div>
+
+    <div class="ov-card">
+      <div class="ov-icon">📡</div>
+      <div class="ov-title">DRS — Drag Reduction System</div>
+      <div class="ov-body">
+        Activated in designated <strong>DRS zones</strong> on a straight, DRS opens
+        the rear wing flap, reducing aerodynamic drag and boosting top speed
+        by roughly <strong>10–15 km/h</strong>. It can only be used when a driver is
+        within <strong>one second</strong> of the car ahead at the DRS detection point.
+        DRS zones are circuit-specific and are a primary tool for overtaking
+        on the modern, aerodynamically complex grid.
+      </div>
+    </div>
+
+    <div class="ov-card">
+      <div class="ov-icon">🚩</div>
+      <div class="ov-title">Flags &amp; Race Control</div>
+      <div class="ov-body">
+        <strong>Yellow flags</strong> signal danger ahead — no overtaking allowed.
+        A <strong>Safety Car</strong> bunches the field together, eliminating gaps
+        built over many laps. <strong>Virtual Safety Car (VSC)</strong> requires all
+        drivers to maintain a set delta time without an actual Safety Car on track.
+        A <strong>Red Flag</strong> stops the race entirely. These interventions can
+        completely overturn race strategy and podium outcomes.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ SECTION 3 — RACE FACTORS ═══ -->
+<div class="info-section" style="background: var(--bg);">
+  <div class="info-eyebrow">Prediction Uncertainty · External Variables</div>
+  <h2 class="info-title">Factors That Can<br>Change Everything</h2>
+  <p class="info-sub">Variables the model cannot fully capture — but that shape real-world outcomes</p>
+
+  <p style="font-size:14px;color:var(--g1);line-height:1.85;font-weight:300;max-width:820px;margin-bottom:36px;">
+    This predictor is built on historical race data — grid positions, qualifying times, recent form,
+    and circuit-specific performance. However, Formula 1 is notoriously unpredictable. The factors
+    below are either absent from the historical record, highly variable, or chaotic in nature.
+    A driver predicted at <strong style="color:var(--white);">8% podium probability</strong> can absolutely win
+    if three of these variables align in their favour. Equally, a <strong style="color:var(--white);">90% favourite</strong>
+    can retire on lap one. Use the model as a <em>statistical baseline</em>, not a crystal ball.
   </p>
 
+  <div class="factors-grid">
+
+    <div class="factor-card">
+      <div class="factor-card-icon">🌧️</div>
+      <div class="factor-card-body">
+        <div class="factor-card-title">Weather Conditions</div>
+        <div class="factor-card-desc">
+          Rain is the single greatest equaliser in Formula 1. A wet race or
+          mid-race shower forces teams to switch between <strong>Intermediate</strong>
+          and <strong>Full Wet</strong> tyres, completely reshuffling strategy.
+          Drivers with exceptional wet-weather skill — historically Hamilton,
+          Verstappen, Senna — can gain multiple positions relative to their
+          dry-pace ranking. The timing of a rain shower relative to pit stop
+          windows can make or break a race in seconds.
+        </div>
+        <span class="factor-impact impact-high">Very High Impact</span>
+      </div>
+    </div>
+
+    <div class="factor-card">
+      <div class="factor-card-icon">🚗</div>
+      <div class="factor-card-body">
+        <div class="factor-card-title">Safety Car &amp; VSC Periods</div>
+        <div class="factor-card-desc">
+          A Safety Car deployed at the right moment can transform a losing
+          strategy into a winning one. Drivers who haven't pitted yet can
+          do so for "free" — closing the gap to the leader without losing
+          time. Conversely, a well-timed Safety Car can wipe out a
+          <strong>30-second lead</strong> built over 40 laps. The VSC is less
+          disruptive but still reshuffles relative gaps and can force
+          unplanned strategy reactions.
+        </div>
+        <span class="factor-impact impact-high">Very High Impact</span>
+      </div>
+    </div>
+
+    <div class="factor-card">
+      <div class="factor-card-icon">⚙️</div>
+      <div class="factor-card-body">
+        <div class="factor-card-title">Mechanical Reliability</div>
+        <div class="factor-card-desc">
+          Power unit failures, gearbox faults, hydraulic leaks, brake issues —
+          a mechanical DNF (Did Not Finish) can occur at any point and instantly
+          eliminates a driver from podium contention regardless of their pace.
+          Modern F1 cars are extraordinarily reliable, but the stress of
+          <strong>300+ km at 300 km/h</strong> means component failure remains a
+          constant background risk, especially for teams pushing development limits.
+        </div>
+        <span class="factor-impact impact-high">High Impact</span>
+      </div>
+    </div>
+
+    <div class="factor-card">
+      <div class="factor-card-icon">💥</div>
+      <div class="factor-card-body">
+        <div class="factor-card-title">First-Corner Incidents</div>
+        <div class="factor-card-desc">
+          Turn 1 on lap 1 is the most chaotic moment of any grand prix.
+          Twenty cars funnel into the first braking zone simultaneously,
+          all defending and attacking position. Contact, punctures, and
+          even retirements are common. A driver starting P8 can emerge
+          as high as P3 — or drop to the back — within the first <strong>90 seconds</strong>
+          of racing. Historical models have almost no ability to predict
+          first-corner lottery outcomes.
+        </div>
+        <span class="factor-impact impact-high">High Impact</span>
+      </div>
+    </div>
+
+    <div class="factor-card">
+      <div class="factor-card-icon">🔧</div>
+      <div class="factor-card-body">
+        <div class="factor-card-title">Pit Stop Execution</div>
+        <div class="factor-card-desc">
+          The difference between a <strong>2.2-second</strong> and a
+          <strong>4.5-second</strong> pit stop can be the difference between
+          coming out ahead or behind a rival. Pit stop errors — loose
+          wheels, lollipop mistakes, unsafe releases — are rare but
+          catastrophic when they occur. Teams also make real-time
+          strategic calls (undercut, overcut, double-stack) that can
+          gain or lose significant track position.
+        </div>
+        <span class="factor-impact impact-medium">Medium-High Impact</span>
+      </div>
+    </div>
+
+    <div class="factor-card">
+      <div class="factor-card-icon">📋</div>
+      <div class="factor-card-body">
+        <div class="factor-card-title">Penalties &amp; Stewards' Decisions</div>
+        <div class="factor-card-desc">
+          Racing incidents are reviewed by stewards who can issue
+          <strong>5-second, 10-second</strong> time penalties added at the next pit stop,
+          or drive-through and stop-go penalties served on track.
+          Grid penalties applied before the race (engine changes, red-flag
+          incidents from the prior weekend) can drop a driver 5–10 places.
+          Penalty decisions can be contentious and highly impactful on
+          final race classification.
+        </div>
+        <span class="factor-impact impact-medium">Medium Impact</span>
+      </div>
+    </div>
+
+    <div class="factor-card">
+      <div class="factor-card-icon">🧠</div>
+      <div class="factor-card-body">
+        <div class="factor-card-title">Team Orders &amp; Strategy Calls</div>
+        <div class="factor-card-desc">
+          Teams control when drivers pit, which tyres they take, and whether
+          they instruct a lead driver to hold position or allow a faster team-mate
+          through. In close championship battles, a team might sacrifice one
+          driver's result to maximise the other's points. These decisions are
+          made in real time based on live timing data, tyre degradation models,
+          and rival team strategies — none of which are predictable pre-race.
+        </div>
+        <span class="factor-impact impact-medium">Medium Impact</span>
+      </div>
+    </div>
+
+    <div class="factor-card">
+      <div class="factor-card-icon">🌡️</div>
+      <div class="factor-card-body">
+        <div class="factor-card-title">Track Temperature &amp; Tyre Deg</div>
+        <div class="factor-card-desc">
+          Tyre degradation varies dramatically based on track surface temperature,
+          which can range from <strong>20°C to 60°C+</strong> on the asphalt.
+          High temperatures accelerate wear, favouring compounds and car setups
+          optimised for longevity. Some teams' cars are inherently kinder to tyres —
+          a trait that shifts finishing order across a full race distance.
+          Unexpected deg forces extra pit stops, costing time and track position.
+        </div>
+        <span class="factor-impact impact-low">Circuit-Dependent</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ SECTION 4 — THRESHOLDS (kept) ═══ -->
+<div class="info-section">
+  <div class="info-eyebrow">Model Output · Interpretation Guide</div>
+  <h2 class="info-title">Decision Thresholds</h2>
+  <p class="info-sub">How the model categorises podium potential based on probability</p>
   <div class="threshold-table">
-    <div class="threshold-row header">
+    <div class="threshold-row t-header">
       <div>Label</div>
-      <div>Probability Range</div>
+      <div>Probability</div>
       <div>Interpretation</div>
     </div>
-
     <div class="threshold-row">
-      <div>Very Likely Chance of a Podium Finish</div>
+      <div>Very Likely Podium Chance</div>
       <div>≥ 70%</div>
-      <div>Strong likelihood based on performance and context</div>
+      <div>Strong likelihood — dominant form, favourable grid, historical circuit performance align</div>
     </div>
-
     <div class="threshold-row">
-      <div>Likely Chance of a Podium Finish</div>
+      <div>Likely Podium Chance</div>
       <div>50% – 69.9%</div>
-      <div>Balanced scenario — outcome could go either way</div>
+      <div>Competitive scenario — outcome is genuinely open, could go either way</div>
     </div>
-
     <div class="threshold-row">
-      <div>Moderate Chance of a Podium Finish</div>
+      <div>Moderate Podium Chance</div>
       <div>30% – 49.9%</div>
-      <div>Possible but requires favourable conditions</div>
+      <div>Possible — requires favourable conditions or a disrupted race to materialise</div>
     </div>
-
     <div class="threshold-row">
-      <div>Unlikely Chance of a Podium Finish</div>
+      <div>Unlikely Podium Chance</div>
       <div>&lt; 30%</div>
-      <div>Weak indicators for podium finish</div>
+      <div>Weak indicators — would need multiple race incidents or exceptional pace to overcome</div>
     </div>
   </div>
 </div>
+
+<script>
+/* ── build grid visualiser ── */
+(function buildGrid() {
+  const pts = [25,18,15,12,10,8,6,4,2,1,0,0,0,0,0,0,0,0,0,0];
+  const labels = [
+    'Pole / P1','P2','P3','P4','P5','P6','P7','P8','P9','P10',
+    'P11','P12','P13','P14','P15','P16','P17','P18','P19','P20'
+  ];
+  const viz = document.getElementById('grid-viz');
+  if (!viz) return;
+  pts.forEach((p, i) => {
+    const slot = document.createElement('div');
+    slot.className = 'grid-slot' + (i < 3 ? ' podium' : '');
+    const fillPct = (p / 25 * 100).toFixed(0);
+    slot.innerHTML = `
+      <div class="gs-num">${i+1}</div>
+      <div class="gs-bar-wrap">
+        <div class="gs-label">${labels[i]}</div>
+        <div class="gs-bar"><div class="gs-fill" style="width:${fillPct}%"></div></div>
+      </div>
+      <div class="gs-pts ${p > 0 ? 'has-pts' : ''}">${p > 0 ? p+'pt' : '—'}</div>
+    `;
+    viz.appendChild(slot);
+  });
+})();
+
+/* ── build points table ── */
+(function buildPtsTable() {
+  const data = [
+    [1,'P1 — Race Winner',25],
+    [2,'P2 — Runner-Up',18],
+    [3,'P3 — Third Place',15],
+    [4,'P4',12],
+    [5,'P5',10],
+    [6,'P6',8],
+    [7,'P7',6],
+    [8,'P8',4],
+    [9,'P9',2],
+    [10,'P10',1],
+    [11,'P11–P20',0],
+  ];
+  const tbody = document.getElementById('pts-tbody');
+  if (!tbody) return;
+  data.forEach(([pos, label, pts]) => {
+    const tr = document.createElement('tr');
+    if (pos <= 3) tr.className = 'podium-row';
+    const barW = (pts / 25 * 100).toFixed(0);
+    tr.innerHTML = `
+      <td class="pos-num">${pos <= 10 ? pos : '11+'}</td>
+      <td>${label}</td>
+      <td class="pts-val">${pts > 0 ? pts : '—'}</td>
+      <td class="pts-bar-cell">
+        <div class="pts-bar">
+          <div class="pts-bar-fill" style="width:${barW}%"></div>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+})();
+</script>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -900,29 +1364,44 @@ $('pform').addEventListener('submit', async e=>{
   finally { btn.disabled=false; }
 });
 
-async function loadMetadata() {
-    statusBox.textContent = "Loading available circuits and drivers...";
-    try {
-        const response = await fetch("/metadata");
-        if (!response.ok) throw new Error(`Server error: ${response.status}`);
-        const data = await response.json();
-
-        if (!data.drivers?.length || !data.circuits?.length) {
-            statusBox.innerHTML = '<span class="error">Metadata loaded but lists are empty. Check server logs.</span>';
-            return;
-        }
-
-        setOptions(document.getElementById("circuitId"), data.circuits);
-        setOptions(document.getElementById("driverId"), data.drivers);
-        statusBox.textContent = "Ready. Select race inputs and run a prediction.";
-    } catch (error) {
-        statusBox.innerHTML = `<span class="error">Failed to load metadata: ${error.message}</span>`;
+async function loadMeta() {
+  try {
+    const res = await fetch('/metadata');
+    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+    const data = await res.json();
+    if (data.circuits && data.circuits.length) {
+      const sc = $('circuitId'); sc.innerHTML = '';
+      data.circuits.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c;
+        o.textContent = c.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase());
+        sc.appendChild(o);
+      });
+      $('stat-circuits').textContent = data.circuits.length;
+    } else {
+      $('circuitId').innerHTML = '<option value="" disabled selected>No circuits found</option>';
     }
+    if (data.drivers && data.drivers.length) {
+      const sd = $('driverId'); sd.innerHTML = '';
+      data.drivers.forEach(d => {
+        const o = document.createElement('option');
+        o.value = d;
+        o.textContent = d.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase());
+        sd.appendChild(o);
+      });
+      $('stat-drivers').textContent = data.drivers.length;
+    } else {
+      $('driverId').innerHTML = '<option value="" disabled selected>No drivers found</option>';
+    }
+  } catch(e) {
+    console.error('Failed to load metadata:', e.message);
+    $('circuitId').innerHTML = '<option value="" disabled selected>Error loading circuits</option>';
+    $('driverId').innerHTML = '<option value="" disabled selected>Error loading drivers</option>';
+  }
 }
-      $('stat-drivers').textContent=data.drivers.length;
 
 ui('idle');
-loadMetadata();
+loadMeta();
 </script>
 </body>
 </html>
@@ -1170,6 +1649,10 @@ def generate_prediction_output(row_dict, podium_proba, threshold=THRESHOLD, raw_
 @app.get("/")
 def index():
     return render_template_string(INDEX_HTML)
+
+@app.get("/images/<path:filename>")
+def serve_images(filename):
+  return send_from_directory(BASE_DIR / "images", filename)
 
 @app.get("/health")
 def health():
