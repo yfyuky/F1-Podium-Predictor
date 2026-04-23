@@ -12,6 +12,24 @@ def latest_row(df):
         return None
     return df.sort_values(["season", "round"]).iloc[-1]
 
+def last_n_rows(df, n=3):
+    """Extract the last n rows sorted by season and round."""
+    if df.empty:
+        return df
+    return df.sort_values(["season", "round"]).tail(n)
+
+def get_trend_values(df, col, n=3, fallback=0.0):
+    """Extract last n values from a column, padding with fallback if needed."""
+    rows = last_n_rows(df, n)
+    if col not in rows.columns:
+        return [fallback] * n
+    vals = rows[col].tolist()
+    vals = [float(v) if pd.notna(v) else fallback for v in vals]
+    # Pad on the left if fewer than n values
+    if len(vals) < n:
+        vals = [fallback] * (n - len(vals)) + vals
+    return vals[-n:]  # Ensure exactly n values
+
 def build_2025_lineup_map(df_feat):
     season_df = (
         df_feat[df_feat["season"] == 2025][["driverId", "constructorId"]]
@@ -25,7 +43,7 @@ def infer_latest_round_2025(df_feat):
         raise ValueError("No 2025 rows found in dataset.")
     return int(rows_2025["round"].max())
 
-def build_feature_row(df_feat, lineup_map, circuit_id, driver_id, qual_position, grid):
+def build_feature_row(df_feat, lineup_map, circuit_id, driver_id, qual_position, grid, df_raw=None):
     season = 2025
     rnd = infer_latest_round_2025(df_feat)
 
@@ -74,5 +92,20 @@ def build_feature_row(df_feat, lineup_map, circuit_id, driver_id, qual_position,
         "driver_constructor_podium_rate": float(latest_driver_constructor["driver_constructor_podium_rate"]) if latest_driver_constructor is not None else RATE_FALLBACK,
         "grid_inverse": 1.0 / float(grid),
     }
+
+    # Extract trend data from raw dataset if available
+    if df_raw is not None:
+        driver_raw_hist = previous_rows(df_raw, season, rnd)
+        driver_raw_hist = driver_raw_hist[driver_raw_hist["driverId"] == driver_id]
+        constructor_raw_hist = previous_rows(df_raw, season, rnd)
+        constructor_raw_hist = constructor_raw_hist[constructor_raw_hist["constructorId"] == constructor_id]
+        
+        row["driver_points_trend"] = get_trend_values(driver_raw_hist, "points", n=3, fallback=0.0)
+        row["driver_finish_trend"] = get_trend_values(driver_raw_hist, "finish_position", n=3, fallback=AVG_FINISH_FALLBACK)
+        row["constructor_points_trend"] = get_trend_values(constructor_raw_hist, "points", n=3, fallback=0.0)
+    else:
+        row["driver_points_trend"] = [0.0, 0.0, 0.0]
+        row["driver_finish_trend"] = [AVG_FINISH_FALLBACK, AVG_FINISH_FALLBACK, AVG_FINISH_FALLBACK]
+        row["constructor_points_trend"] = [0.0, 0.0, 0.0]
 
     return row
